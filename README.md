@@ -5,14 +5,18 @@ Programs for processing the master freight network (MFN), master highway network
 This repository holds scripts and tools where the MFN, MHN, and MRN (and any other necessary files) can be processed together for input into either the freight model or travel model for analysis. 
 
 At a conceptual level, the way MFN/MHN/MRN fit together for processing is described by the (simplified) diagram. 
-
 ```mermaid
 graph TD;
 MFN["`M**F**N`"]
 MHN["`M**H**N`"]
-MRN["`M**H**N`"]
+MRN["`M**R**N`"]
+MFN --> Mesozones --> Freight
+MHN --> Highways --> Mesolinks --> Freight
+MHN --> Bus --> Transit --> Travel
+Highways --> Bus
+Highways --> Travel
+MRN --> Rail --> Transit --> Travel
 ```
-
 There are four main objectives:
 1. Currently there are three separate repositories for the MFN, MHN, and MRN. The freight model requires input from both the MFN and the MHN, while the travel model requires input from both the MHN and the MRN. This repository aims to resolve inconsistencies between the three original repositories.
 2. All three of the original repositories have code written in multiple languages, including SAS. Sometimes a Python script will call a SAS script or an R script will call a SAS script. This repository aims to have its code written in Python and R (Python is a must if writing to geodatabases) and to completely eliminate reliance on SAS.
