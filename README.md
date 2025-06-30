@@ -2,7 +2,7 @@
 Programs for processing the Master Freight Network (MFN), Master Highway Network (MHN), and Master Rail Network (MRN) for freight/travel modeling. 
 
 At a conceptual level, the way MFN/MHN/MRN fit together for processing is described by the (greatly simplified) diagram: 
-![A diagram showing the logic behind this repository, with a freight path and a travel path.](images/concept.png)
+![A diagram showing the logic behind this repository, with a freight path and a travel path.](images/concept.PNG)
 
 ## Objectives 
 This repository holds scripts and tools where the MFN, MHN, and MRN (and any other necessary files) can be processed together for input into either the freight model or travel model for analysis. 
