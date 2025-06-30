@@ -14,3 +14,7 @@ There are four main objectives:
 2. All three of the original repositories have code written in multiple languages, including SAS. Sometimes a Python script will call a SAS script or an R script will call a SAS script. This repository aims to have its code written in Python and R and to completely eliminate reliance on SAS.
 3. This repository also aims to simplify the three processes. Input/output should be made clear, as well as script dependencies. It aims to avoid nested scripts and chicken/egg situations (where running script A depends on the output of script B while running script B depends on the output of script A). 
 4. Everything should be well documented.
+
+By the end of my internship (9/4/2025) I hope to have the parts which process the MHN finished (essentially, complete the task that I was given by Tim). The orange in the diagram represents that goal. 
+
+![A diagram showing my summer goal.]("images\summer_goal.PNG")
