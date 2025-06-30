@@ -17,4 +17,4 @@ There are four main objectives:
 
 By the end of my internship (9/4/2025) I hope to have the parts which process the MHN finished (essentially, complete the task that I was given by Tim). The orange in the diagram represents that goal. 
 
-![A diagram showing my summer goal.]("images\summer_goal.PNG")
+![A diagram showing my summer goal.]("images\summer_goal.png")
