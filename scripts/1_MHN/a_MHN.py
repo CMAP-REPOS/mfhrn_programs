@@ -29,6 +29,8 @@ class MasterHighwayNetwork:
     hwyproj_years_df = pd.DataFrame(data = [row for row in arcpy.da.SearchCursor(hwyproj_years, hwyproj_years_fields)],
                                     columns = hwyproj_years_fields)
     
-    hwyproj_df = pd.merge(hwyproj_coding_df, hwyproj_years_df, how = "left", on = "TIPID")
+    base_year = min(hwyproj_years_df.COMPLETION_YEAR.to_list()) - 1
+    hwyproj_df = pd.merge(hwyproj_coding_df, hwyproj_years_df, how = "left", on = "TIPID") ## projects with their years 
 
-    
+    def generate_base_year():
+        print("let's have some soup")
