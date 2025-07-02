@@ -15,6 +15,6 @@ There are four main objectives:
 3. This repository also aims to simplify the three processes. Input/output should be made clear, as well as script dependencies. It aims to avoid nested scripts and chicken/egg situations (where running script A depends on the output of script B while running script B depends on the output of script A). 
 4. Everything should be well documented.
 
-By the end of my internship (9/4/2025) I hope to have the parts which process the MHN finished (essentially, complete the task that I was given by Tim). The orange in the diagram represents that goal. 
+During the course of my summer internship (up to 09/04) I will be focusing on translating scripts relating only to the MHN (as Tim gave me the task of translating scripts from mhn_programs). The orange in the diagram represents what I will be working on. The folder I will be working in is scripts/1_MHN. It's a fairly straightforward translation of mhn_programs, except that the parts which also use input from the MRN will not be translated.  
 
-![A diagram showing my summer goal.](images/highway_process.png)
+![A diagram showing my summer task.](images/highway_process.png)
