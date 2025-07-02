@@ -9,7 +9,7 @@ import sys
 import arcpy
 import pandas as pd
 
-class HighwayNetwork:
+class MasterHighwayNetwork:
 
     # code paths
     base_path = os.path.abspath("..\..")

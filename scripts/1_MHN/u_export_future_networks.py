@@ -3,7 +3,7 @@
 ## Author: npeterson
 ## Translated + Updated by ccai (2025)
 
-from a_MHN import MasterHighwayNetwork
+from a1_HN import HighwayNetwork
 
 import sys
 import argparse
@@ -17,10 +17,10 @@ if __name__ == "__main__":
     if version != "draft" and version != "final":
         sys.exit("error: you must choose whether the version is 'draft' or 'final'")
 
-    MHN = MasterHighwayNetwork()
+    HN = HighwayNetwork()
 
-    print(f"The original base year is {MHN.base_year}.")
-    MHN.generate_base_year()
-    MHN.clean_base_project_table()
+    print(f"The original base year is {HN.base_year}.")
+    HN.generate_base_year()
+    HN.clean_base_project_table()
 
     print("Done")
