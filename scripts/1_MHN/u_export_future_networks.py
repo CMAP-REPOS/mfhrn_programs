@@ -21,6 +21,5 @@ if __name__ == "__main__":
 
     print(f"The original base year is {HN.base_year}.")
     HN.generate_base_year()
-    HN.clean_base_project_table()
 
     print("Done")
