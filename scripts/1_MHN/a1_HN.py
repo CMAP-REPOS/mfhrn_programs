@@ -20,15 +20,18 @@ class HighwayNetwork:
     def __init__(self):
 
         # get paths 
-        base_path = os.path.abspath("..\..") # okay maybe not like this 
-        self.in_folder = os.path.join(base_path, "input")
+        sys_path = sys.argv[0]
+        abs_path = os.path.abspath(sys_path)
+        mfhrn_path = os.path.dirname(os.path.dirname(os.path.dirname(abs_path)))
+        
+        self.in_folder = os.path.join(mfhrn_path, "input")
         self.in_gdb = os.path.join(self.in_folder, "MHN.gdb")
-
+        
         years_csv_path = os.path.join(self.in_folder, "years.csv")
         self.years_list = pd.read_csv(years_csv_path)["years"].to_list()
-
-        self.out_folder = os.path.join(base_path, "output")
-        self.mhn_out_folder = os.path.join(base_path, "output", "1_MHN")
+        
+        self.out_folder = os.path.join(mfhrn_path, "output")
+        self.mhn_out_folder = os.path.join(self.out_folder, "1_MHN")
 
         # highway files - names of feature classes + tables in MHN
         self.hwy_files = [
@@ -204,13 +207,6 @@ class HighwayNetwork:
 if __name__ == "__main__":
 
     HN = HighwayNetwork()
-
-    print(len(HN.hwylink_df.columns))
-    print(len(HN.hwyproj_df.columns))
-    print(HN.current_gdb)
     HN.generate_base_year()
-    print(len(HN.hwylink_df.columns))
-    print(len(HN.hwyproj_df.columns))
-    print(HN.current_gdb)
 
     print("Done")
