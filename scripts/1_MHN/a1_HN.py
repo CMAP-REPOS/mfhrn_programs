@@ -26,12 +26,11 @@ class HighwayNetwork:
         
         self.in_folder = os.path.join(mfhrn_path, "input")
         self.in_gdb = os.path.join(self.in_folder, "MHN.gdb")
+
+        self.mhn_out_folder = os.path.join(mfhrn_path, "output", "1_MHN")
         
         years_csv_path = os.path.join(self.in_folder, "years.csv")
         self.years_list = pd.read_csv(years_csv_path)["years"].to_list()
-        
-        self.out_folder = os.path.join(mfhrn_path, "output")
-        self.mhn_out_folder = os.path.join(self.out_folder, "1_MHN")
 
         # highway files - names of feature classes + tables in MHN
         self.hwy_files = [
@@ -123,8 +122,8 @@ class HighwayNetwork:
     def generate_base_year(self):
 
         # delete output folder + recreate it 
-        out_folder = self.out_folder
         mhn_out_folder = self.mhn_out_folder
+        out_folder = os.path.dirname(mhn_out_folder)
         in_gdb = self.in_gdb
         base_year = self.base_year 
 
