@@ -5,7 +5,11 @@ At a conceptual level, the way MFN/MHN/MRN fit together for processing is descri
 ![A diagram showing the structure behind this repository.](images/concept.png)
 
 We can then see processing as following two separate paths: 
+
+A **freight path**... 
 ![A diagram showing the freight path through this repository.](images/freight_concept.png)
+
+... and a **travel path**. 
 ![A diagram showing the travel path through this repository.](images/travel_concept.png)
 
 To get started with this repository, check out the wiki. 
