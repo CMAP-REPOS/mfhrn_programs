@@ -164,7 +164,8 @@ class HighwayNetwork:
 
         print("Base year copied and prepared for modification.")
 
-    # def clean_base_project_table(self):
+    # def check_base_link_fc(self):
+    # def check_base_project_table(self):
         
     #     mhn_out_folder = self.mhn_out_folder
     #     base_year = self.base_year
@@ -207,5 +208,6 @@ if __name__ == "__main__":
 
     HN = HighwayNetwork()
     HN.generate_base_year()
+    print(max(HN.hwylink_df.groupby(["ANODE", "BNODE"]).size()))
 
     print("Done")
