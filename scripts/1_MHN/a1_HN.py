@@ -231,7 +231,7 @@ class HighwayNetwork:
                 add_cltl = row[16]
                 add_rrgradecross = row[17]
                 new_tolldollars = row[18]
-                rep_abb = row[26]
+                rep_abb = row[24]
 
                 # check that TIPID is valid 
                 tipids = self.hwyproj_years_df.TIPID.to_list()
@@ -357,7 +357,39 @@ class HighwayNetwork:
 
                 # check that action codes are valid. 
                 baselink = int(abb[-1])
+                if baselink == 0 and action_code not in [2, 4]:
+                    f.write(f"Project {tipid} link {abb} has an invalid action code applied to it.\n")
+                    row[26] = 0
+                    row[27] = "Skeleton links cannot have action codes 1 or 3 applied to them."
+                    ucursor.updateRow(row)
+                    continue
+                if baselink == 1 and action_code not in [1,3]:
+                    f.write(f"Project {tipid} link {abb} has an invalid action code applied to it.\n")
+                    row[26] = 0
+                    row[27] = "Regular links cannot have action codes 2 or 4 applied to them."
+                    ucursor.updateRow(row)
+                    continue
 
+                # check that REP_ANODE + REP_BNODE are only associated with Action Code 2 
+                if rep_abb != "0-0-1" and action_code in [1, 3, 4]:
+                    f.write(f"Project {tipid} link {abb} should not have REP_ANODE or REP_BNODE filled in.")
+                    row[26] = 0
+                    row[27] = "REP_ANODE + REP_BNODE are invalid if action code != 2."
+                    ucursor.updateRow(row)
+                    continue
+
+                # check that action codes 2 + 3 don't have other attributes filled in 
+                attributes = [new_directions, new_type1, new_type2, new_ampm1, new_ampm2,
+                              new_postedspeed1, new_postedspeed2, new_thrulanes1, new_thrulanes2, 
+                              new_thrulanewidth1, new_thrulanewidth2, add_parklanes1, add_parklanes2,
+                              add_sigic, add_cltl, add_rrgradecross, new_tolldollars, new_modes]
+                
+                if action_code in [2, 3] and any(attribute != 0 for attribute in attributes):
+                    f.write(f"Project {tipid} link {abb} has invalid attributes filled in.")
+                    row[26] = 0
+                    row[27] = "Action Codes 2 + 3 should not be associated with any other attributes."
+                    ucursor.updateRow(row)
+                    continue
 
         f.close()
 
