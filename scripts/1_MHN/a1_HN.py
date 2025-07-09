@@ -14,6 +14,7 @@ import shutil
 import sys
 import arcpy
 import pandas as pd
+import time
 
 class HighwayNetwork:
 
@@ -169,7 +170,15 @@ class HighwayNetwork:
 
         # add fields to review updates (a la Volpe)
         hwylink_fc = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
-        arcpy.management.AddFields(hwylink_fc, [["PROJECT", "TEXT"], ["DESCRIPTION", "TEXT"]])
+        arcpy.management.AddFields(hwylink_fc, [["NEW_BASELINK", "TEXT"], ["PROJECT", "TEXT"], ["DESCRIPTION", "TEXT"]])
+        arcpy.management.CalculateField(
+            in_table= hwylink_fc,
+            field="NEW_BASELINK",
+            expression="!BASELINK!",
+            expression_type="PYTHON3",
+            code_block="",
+            field_type="TEXT",
+            enforce_domains="NO_ENFORCE_DOMAINS")
 
         self.get_hwy_dfs() # update the HN's current dfs 
 
@@ -181,17 +190,22 @@ class HighwayNetwork:
     def check_base_project_table(self):
         
         mhn_out_folder = self.mhn_out_folder
-        base_year = self.base_year
 
-        base_project_table_warnings = os.path.join(
+        base_project_table_errors = os.path.join(
             mhn_out_folder, 
-            "base_project_table_warnings.txt")
-        error_file= open(base_project_table_warnings, "a") # open error file, don't forget to close it!
+            "base_project_table_errors.txt")
+        error_file= open(base_project_table_errors, "a") # open error file, don't forget to close it!
 
-        # create dfs now to be compared to later
+        # create hwylink data structures now to be compared to later
         hwylink_df = self.hwylink_df
         toll1_list = hwylink_df[(hwylink_df.TYPE1 == "7") & (hwylink_df.POSTEDSPEED1 == 0)].ABB.to_list()
         toll2_list = hwylink_df[(hwylink_df.TYPE2 == "7") & (hwylink_df.POSTEDSPEED2 == 0)].ABB.to_list()
+
+        hwylink_abb_df = hwylink_df[["ANODE", "BNODE", "BASELINK", "ABB"]]
+        hwylink_dup_df = pd.merge(hwylink_abb_df, hwylink_abb_df.copy(), left_on = ["ANODE", "BNODE"], right_on = ["BNODE", "ANODE"])
+        hwylink_dup_set = set(hwylink_dup_df.ABB_x.to_list() + hwylink_dup_df.ABB_y.to_list())
+
+        print(f"{len(hwylink_dup_set)} links with potential duplication issues.")
 
         # projects with year 9999 are not well maintained 
         # only check integrity if != 9999
@@ -199,6 +213,7 @@ class HighwayNetwork:
         hwyproj_df = self.hwyproj_df[self.hwyproj_df.COMPLETION_YEAR != 9999]
         hwyproj_coding_table = os.path.join(self.current_gdb, "hwyproj_coding")
 
+        # priority key check
         # check that no TIPID + ABB is duplicated. 
         hwyproj_group_df = hwyproj_df.groupby(["TIPID", "ABB"]).size().reset_index()
         hwyproj_group_df = hwyproj_group_df.rename(columns = {0: "size"})
@@ -215,20 +230,22 @@ class HighwayNetwork:
             for row in ucursor:
                 if (row[0], row[1]) in dup_set:
                     row[2] = 0
-                    row[3] = "Duplicate TIPID-ABB combination. Must be unique."
+                    row[3] = "Error: Duplicate TIPID-ABB combination. Must be unique."
                     dup_fail+=1
                     ucursor.updateRow(row)
         
+        error_file.write("Priority key check:\n")
         if dup_fail != 0:
-            error_file.write(f"{dup_fail} rows failed the duplicate check and had USE set to 0. Check output gdb.\n")
+            error_file.write(f"{dup_fail} rows failed the duplicate check and had USE set to 0. Check output gdb.\n\n")
         else:
-            error_file.write("No rows failed the duplicate check.\n")
+            error_file.write("No rows failed the duplicate check.\n\n")
 
         # check row by row 
         # don't have to check the validity of already discarded rows
         # just count the rows with mistakes
 
         row_fail = 0
+        row_warning = 0
         fields = [f.name for f in arcpy.ListFields(hwyproj_coding_table) if f.name != "OBJECTID"]
         where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1"
         with arcpy.da.UpdateCursor(hwyproj_coding_table, fields, where_clause) as ucursor:
@@ -247,7 +264,7 @@ class HighwayNetwork:
                 except:
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Non-numeric values in fields where it should be numeric."
+                    row[27] = "Error: Non-numeric values in fields where it should be numeric."
                     ucursor.updateRow(row)
                     continue
 
@@ -266,7 +283,7 @@ class HighwayNetwork:
                 if tipid not in tipids: 
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "TIPID is not a legitimate project."
+                    row[27] = "Error: TIPID is not a legitimate project."
                     ucursor.updateRow(row)
                     continue
 
@@ -275,7 +292,7 @@ class HighwayNetwork:
                 if abb not in abbs:
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "ABB is not an actual link."
+                    row[27] = "Error: ABB is not an actual link."
                     ucursor.updateRow(row)
                     continue
 
@@ -283,103 +300,103 @@ class HighwayNetwork:
                 if action_code not in [1, 2, 3, 4]:
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Action code is not valid."
+                    row[27] = "Error: Action code is not valid."
                     ucursor.updateRow(row)
                     continue
                 if new_directions not in [0, 1, 2, 3]:
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Directions flag is not valid."
+                    row[27] = "Error: Directions flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if new_type1 not in [0, 1, 2, 3, 4, 5, 6, 7, 8]:
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Type 1 flag is not valid."
+                    row[27] = "Error: Type 1 flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if new_type2 not in [0, 1, 2, 3, 4, 5, 6, 7, 8]:
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Type 2 flag is not valid."
+                    row[27] = "Error: Type 2 flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if new_ampm1 not in [0, 1, 2, 3, 4]:
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "AMPM 1 flag is not valid."
+                    row[27] = "Error: AMPM 1 flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if new_ampm2 not in [0, 1, 2, 3, 4]:
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "AMPM 2 flag is not valid."
+                    row[27] = "Error: AMPM 2 flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if new_postedspeed1 < 0:
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Posted speed 1 flag is not valid."
+                    row[27] = "Error: Posted speed 1 flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if new_postedspeed2 < 0:
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Posted speed 2 flag is not valid."
+                    row[27] = "Error: Posted speed 2 flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if new_thrulanes1 < 0: 
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Through lanes 1 flag is not valid."
+                    row[27] = "Error: Through lanes 1 flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if new_thrulanes2 < 0:
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Through lanes 2 flag is not valid."
+                    row[27] = "Error: Through lanes 2 flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if new_thrulanewidth1 < 0: 
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Through lanes width 1 flag is not valid."
+                    row[27] = "Error: Through lanes width 1 flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if new_thrulanewidth2 < 0:
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Through lanes width2 flag is not valid."
+                    row[27] = "Error: Through lanes width2 flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if add_sigic not in [0, 1]:
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Sigic flag is not valid."
+                    row[27] = "Error: Sigic flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if add_cltl not in [-1, 0, 1]:
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Cltl flag is not valid."
+                    row[27] = "Error: Cltl flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if add_rrgradecross not in [-1, 0, 1]: 
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Railroad crossing flag is not valid."
+                    row[27] = "Error: Railroad crossing flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if new_tolldollars < 0: 
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Toll dollar flag is not valid."
+                    row[27] = "Error: Toll dollar flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if new_modes not in [0, 1, 2, 3, 4, 5]:
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Mode flag is not valid."
+                    row[27] = "Error: Mode flag is not valid."
                     ucursor.updateRow(row)
                     continue
 
@@ -388,13 +405,13 @@ class HighwayNetwork:
                 if baselink == 0 and action_code not in [2, 4]:
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Skeleton links cannot have action codes 1 or 3 applied to them."
+                    row[27] = "Error: Skeleton links cannot have action codes 1 or 3 applied to them."
                     ucursor.updateRow(row)
                     continue
                 if baselink == 1 and action_code not in [1,3]:
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Regular links cannot have action codes 2 or 4 applied to them."
+                    row[27] = "Error: Regular links cannot have action codes 2 or 4 applied to them."
                     ucursor.updateRow(row)
                     continue
 
@@ -402,7 +419,7 @@ class HighwayNetwork:
                 if action_code in [1, 3, 4] and rep_abb != "0-0-1":
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "REP_ANODE + REP_BNODE are invalid if action code != 2."
+                    row[27] = "Error: REP_ANODE + REP_BNODE are invalid if action code != 2."
                     ucursor.updateRow(row)
                     continue
 
@@ -415,15 +432,7 @@ class HighwayNetwork:
                 if action_code in [2, 3] and any(attribute != 0 for attribute in attributes):
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Action Codes 2 + 3 should not be associated with any other attributes."
-                    ucursor.updateRow(row)
-                    continue
-
-                # action code 1 must have at least 1 attribute filled in. 
-                if action_code == 1 and all(attribute == 0 for attribute in attributes):
-                    row_fail+=1
-                    row[26] = 0
-                    row[27] = "Action Code 1 must make at least one modification."
+                    row[27] = "Error: Action Codes 2 + 3 should not be associated with any other attributes."
                     ucursor.updateRow(row)
                     continue
 
@@ -431,7 +440,7 @@ class HighwayNetwork:
                 if action_code == 2 and rep_abb not in abbs:
                     row_fail+=1
                     row[26] = 0 
-                    row[27] = "Action code 2 must be associated with a valid REP_ABB."
+                    row[27] = "Error: Action code 2 must be associated with a valid REP_ABB."
                     ucursor.updateRow(row)
                     continue
 
@@ -441,13 +450,13 @@ class HighwayNetwork:
                     if any(field == 0 for field in req_fields):
                         row_fail+=1
                         row[26] = 0 
-                        row[27] = "Missing required attribute(s) on new link."
+                        row[27] = "Error: Missing required attribute(s) on new link."
                         ucursor.updateRow(row)
                         continue
                     elif new_type1 != 7 and new_postedspeed1 == 0:
                         row_fail+=1
                         row[26] = 0 
-                        row[27] = "Missing speed 1 on new link."
+                        row[27] = "Error: Missing speed 1 on new link."
                         ucursor.updateRow(row)
                         continue
 
@@ -459,7 +468,7 @@ class HighwayNetwork:
                     if any(field2 != 0 for field2 in all_fields2):
                         row_fail+=1
                         row[26] = 0 
-                        row[27] = f"Unusable '2' attributes for this direction = {new_directions} link."
+                        row[27] = f"Error: Unusable '2' attributes for this direction = {new_directions} link."
                         ucursor.updateRow(row)
                         continue
                     
@@ -471,22 +480,40 @@ class HighwayNetwork:
                     if any(field2 == 0 for field2 in req_fields2):
                         row_fail+=1
                         row[26] = 0 
-                        row[27] = "Missing '2' attributes for this direction = 3 link."
+                        row[27] = "Error: Missing '2' attributes for this direction = 3 link."
                         ucursor.updateRow(row)
                         continue 
                     elif new_type2 !=7 and new_postedspeed2 == 0:
                         row_fail+=1
                         row[26] = 0
-                        row[27] = "Missing speed 2 on this direction = 3 link."
+                        row[27] = "Error: Missing speed 2 on this direction = 3 link."
                         ucursor.updateRow(row)
                         continue
+
+                # if link has potential for duplication
+                # action code 2 should not be applied to it 
+                if action_code == 2 and abb in hwylink_dup_set:
+                    row_fail+=1
+                    row[26] = 0 
+                    row[27] = "Error: Use action code 4 on a link with potential issues with duplication."
+                    ucursor.updateRow(row)
+                    continue
+
+                # if link has potential for duplication
+                # cannot set new directions > 1 
+                if new_directions > 1 and abb in hwylink_dup_set:
+                    row_fail+=1
+                    row[26] = 0 
+                    row[27] = "Error: cannot set NEW_DIRECTIONS > 1 or else issue with duplication."
+                    ucursor.updateRow(row)
+                    continue
 
                 # very specific situation with toll plazas
                 if action_code == 1 and abb in toll1_list:
                     if new_type1 != 0 and new_postedspeed1 == 0: 
                         row_fail+=1
                         row[26] = 0 
-                        row[27] = "Missing new posted speed 1 on a link which changed from a toll plaza."
+                        row[27] = "Error: Missing new posted speed 1 on a link which changed from a toll plaza."
                         ucursor.updateRow(row)
                         continue
 
@@ -494,53 +521,96 @@ class HighwayNetwork:
                     if new_type2 != 0 and new_postedspeed2 == 0:
                         row_fail+=1
                         row[26] = 0
-                        row[27] = "Missing new posted speed 2 on a link which changed from a toll plaza."
+                        row[27] = "Error: Missing new posted speed 2 on a link which changed from a toll plaza."
                         ucursor.updateRow(row)
                         continue
+
+                # action code 1 should have at least 1 attribute filled in. 
+                if action_code == 1 and all(attribute == 0 for attribute in attributes):
+                    row_warning +=1
+                    row[27] = "Warning: Action Code 1 should make at least one modification."
+                    ucursor.updateRow(row)
+                    continue
+
+                # warn for links with potential duplication issues 
+                if abb in hwylink_dup_set:
+                    row_warning +=1 
+                    row[27] = "Warning: changes on links with duplication potential should be reviewed."
+                    ucursor.updateRow(row)
+                    continue
             
             # out of for loop
         
         # out of cursor
+        error_file.write("Individual row check:")
         if row_fail != 0:
             error_file.write(f"{row_fail} rows failed the individual row check and had USE set to 0. Check output gdb.\n")
         else:
             error_file.write("No rows failed the individual row check.\n")
 
+        if row_warning != 0:
+            error_file.write(f"{row_warning} rows passed the individual row check with warnings. Check output gdb.\n\n")
+        else:
+            error_file.write("\n")
+
+        # row combo check 
+        self.get_hwy_dfs()
+        
+        hwyproj_df = self.hwyproj_df
+        hwyproj_df = hwyproj_df[(hwyproj_df.COMPLETION_YEAR != 9999) & (hwyproj_df.USE == 1)]
+
+        error_file.write("Row combo check:\n")
+
+        # check for links with both 2 + 4 applied to it 
+        hwyproj_2_set = set(hwyproj_df[hwyproj_df.ACTION_CODE == "2"].ABB.to_list())
+        hwyproj_4_set = set(hwyproj_df[hwyproj_df.ACTION_CODE == "4"].ABB.to_list())
+
+        overlap_24_set = hwyproj_2_set.intersection(hwyproj_4_set)
+
+        if len(overlap_24_set) > 0:
+
+            overlap_24_string = str(overlap_24_set)[1:-1]
+            where_clause = f"ABB in ({overlap_24_string})"
+            with arcpy.da.UpdateCursor(hwyproj_coding_table, fields, where_clause) as ucursor:
+                for row in ucursor:
+                    row[27] = "Warning: Link has both action codes 2 and 4 applied to it."
+                    ucursor.updateRow(row)
+
+            error_file.write(f"Links {overlap_24_string} have both action codes 2 and 4 applied to it.\n")
+        
+        else:
+            error_file.write(f"No warnings about ACTION_CODE 2 + 4 overlapping.")
+
+        hwyproj_3_set = set(hwyproj_df[hwyproj_df.ACTION_CODE == "3"].ABB.to_list())
+        hwyproj_rep_set = set(hwyproj_df[hwyproj_df.REP_ABB != "0-0-1"].REP_ABB.to_list())
+
+        no_delete_set = hwyproj_rep_set - hwyproj_3_set
+
+        if len(no_delete_set) > 0:
+        
+            no_delete_string = str(no_delete_set)[1:-1]
+            where_clause = f"ABB in ({no_delete_string})"
+            with arcpy.da.UpdateCursor(hwyproj_coding_table, fields, where_clause) as ucursor:
+                for row in ucursor:
+                    row[27] = "Warning: Replaced link is not also deleted."
+                    ucursor.updateRow(row)
+
+            error_file.write(f"These 'replaced' links {no_delete_string} are not also deleted.\n")
+        
+        else:
+            error_file.write(f"No warnings about replaced links not being deleted.")
+
         error_file.close()
-
-    #     # make sure that every arc which is getting replaced 
-    #     # is also deleted (3)
-
-    #     rep_abbs_df = hwyproj_2050_df[hwyproj_2050_df.REP_ABB != "0-0-1"][["TIPID", "REP_ABB", "COMPLETION_YEAR"]].drop_duplicates()
-    #     action_3_df = hwyproj_2050_df[hwyproj_2050_df.ACTION_CODE == "3"][["TIPID", "ABB", "COMPLETION_YEAR", "ACTION_CODE"]]
-    #     check_3_df = pd.merge(rep_abbs_df, action_3_df, how = "left", left_on= ["TIPID", "REP_ABB", "COMPLETION_YEAR"], right_on = ["TIPID", "ABB", "COMPLETION_YEAR"])
-    #     check_3_df_okay = check_3_df[check_3_df.ACTION_CODE.notnull()] # has a corresponding delete
-    #     check_3_df_null = check_3_df[check_3_df.ACTION_CODE.isnull()] # does not have a corresponding delete 
-        
-    #     print(f"{len(check_3_df_okay)} out of {len(check_3_df)} of the replaced links were also deleted in that same TIPID + year")
-    #     print(f"{len(check_3_df_null)} were not. Writing to base_project_table_notes.txt")
-        
-    #     base_project_table_notes = os.path.join(mhn_out_folder, "base_project_table_notes.txt")
-
-    #     with open(base_project_table_notes, "a") as f:
-    #         f.write("These replaced links were not also deleted.\n")
-    #         f.write(check_3_df_null[["TIPID", "REP_ABB", "COMPLETION_YEAR"]].to_string())
-    #         f.write("\n\n")
-
-    #     check_3_dict_null = check_3_df_null[["TIPID", "REP_ABB", "COMPLETION_YEAR"]].to_dict("records")
-
-    #     with arcpy.da.Editor(out_GDB):
-    #         # every other field has a default of 0
-    #         fields = ["TIPID", "ACTION_CODE", "ABB", "NEW_TOLLDOLLARS", "NEW_MODES", "COMPLETION_YEAR", "NOTES"]
-    #         with arcpy.da.InsertCursor(hwyproj_coding_table, fields) as icursor:
-    #             for row in check_3_dict_null:
-    #                 icursor.insertRow((row["TIPID"], "3", row["REP_ABB"], 0, "0", row["COMPLETION_YEAR"], "added action code 3"))
 
 # main function for testing 
 if __name__ == "__main__":
 
+    start_time = time.time()
     HN = HighwayNetwork()
     HN.generate_base_year()
     HN.check_base_project_table()
+
+    end_time = time.time()
+    print(f"{round(end_time - start_time)}s to execute.")
 
     print("Done")
