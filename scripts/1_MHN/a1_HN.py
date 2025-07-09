@@ -128,6 +128,8 @@ class HighwayNetwork:
     # function that generates base year gdb
     def generate_base_year(self):
 
+        print("Copying base year...")
+
         # delete output folder + recreate it 
         mhn_out_folder = self.mhn_out_folder
         out_folder = os.path.dirname(mhn_out_folder)
@@ -182,12 +184,39 @@ class HighwayNetwork:
 
         self.get_hwy_dfs() # update the HN's current dfs 
 
-        print("Base year copied and prepared for modification.")
+        print("Base year copied and prepared for modification.\n")
 
-    # def check_base_link_fc(self):
+    # function that checks base links 
+    def check_base_link_fc(self):
+
+        print("Checking base highway link feature class for errors...")
+
+        hwylink_df = self.hwylink_df 
+
+        ab_count_df = hwylink_df.groupby(["ANODE", "BNODE"]).size().reset_index()
+        ab_count_df = ab_count_df.rename(columns = {0: "size"})
+        
+        if (ab_count_df["size"].max() > 1):
+
+            print(ab_count_df[ab_count_df.size >= 2])
+            sys.exit("Violating ANODE-BNODE combinations. Crashing program.")
+
+        hwylink_abb_df = hwylink_df[["ANODE", "BNODE", "ABB", "DIRECTIONS"]]
+        hwylink_dup_df = pd.merge(hwylink_abb_df, hwylink_abb_df.copy(), left_on = ["ANODE", "BNODE"], right_on = ["BNODE", "ANODE"])
+        directions_set = set(hwylink_dup_df.DIRECTIONS_x.to_list()) | set(hwylink_dup_df.DIRECTIONS_y.to_list())
+        
+        if directions_set != {'1'}:
+
+            print(hwylink_dup_df[(hwylink_dup_df.DIRECTIONS_x != '1') | (hwylink_dup_df.DIRECTIONS_y != '1')])
+            sys.exit("Violating directional link combinations. Crashing program.")
+
+        print("Base highway link feature class checked for errors.\n")
+        
 
     # function that checks the project table
     def check_base_project_table(self):
+
+        print("Checking base project table for errors...")
         
         mhn_out_folder = self.mhn_out_folder
 
@@ -204,8 +233,6 @@ class HighwayNetwork:
         hwylink_abb_df = hwylink_df[["ANODE", "BNODE", "BASELINK", "ABB"]]
         hwylink_dup_df = pd.merge(hwylink_abb_df, hwylink_abb_df.copy(), left_on = ["ANODE", "BNODE"], right_on = ["BNODE", "ANODE"])
         hwylink_dup_set = set(hwylink_dup_df.ABB_x.to_list() + hwylink_dup_df.ABB_y.to_list())
-
-        print(f"{len(hwylink_dup_set)} links with potential duplication issues.")
 
         # projects with year 9999 are not well maintained 
         # only check integrity if != 9999
@@ -602,12 +629,17 @@ class HighwayNetwork:
 
         error_file.close()
 
+        self.get_hwy_dfs()
+
+        print("Base highway project table checked for errors.\n")
+
 # main function for testing 
 if __name__ == "__main__":
 
     start_time = time.time()
     HN = HighwayNetwork()
     HN.generate_base_year()
+    HN.check_base_link_fc()
     HN.check_base_project_table()
 
     end_time = time.time()
