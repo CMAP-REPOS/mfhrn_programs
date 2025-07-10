@@ -7,7 +7,7 @@
 ## 5) import_highway_projects_2.sas
 
 ## Author: npeterson
-## Translation by ccai (2025)
+## Translated by ccai (2025)
 
 import os
 import shutil
@@ -184,31 +184,57 @@ class HighwayNetwork:
 
         print("Base year copied and prepared for modification.\n")
 
-    # function that checks base links 
-    def check_base_link_fc(self):
+    # function that checks base links + nodes
+    def check_base_fcs(self):
 
-        print("Checking base highway link feature class for errors...")
+        print("Checking base highway links and nodes for errors...")
 
+        self.get_hwy_dfs()
+        hwynode_df = self.hwynode_df
         hwylink_df = self.hwylink_df 
 
+        # nodes must be unique 
+        node_counts = hwynode_df.NODE.value_counts()
+        
+        if (node_counts.max() > 1):
+            print(node_counts[node_counts > 1])
+            sys.exit("These nodes violate unique node ID constraint. Crashing program.")
+
+        all_node_set = set(hwynode_df.NODE.to_list())
+        link_node_set = set(hwylink_df.ANODE.to_list()) | set(hwylink_df.BNODE.to_list())
+
+        # nodes should not be extraneous. 
+        extra_nodes = all_node_set - link_node_set 
+        
+        if (len(extra_nodes) > 0):
+            print(extra_nodes)
+            sys.exit("These nodes are not connected to any links. Crashing program.") 
+
+        # link anode / bnode must be in available nodes 
+        invalid_nodes = link_node_set - all_node_set
+
+        if (len(invalid_nodes) > 0):
+            print(invalid_nodes)
+            sys.exit("These nodes are not present in the node feature class. Crashing program.")
+
+        # duplicate anode-bnode combinations are not allowed
         ab_count_df = hwylink_df.groupby(["ANODE", "BNODE"]).size().reset_index()
         ab_count_df = ab_count_df.rename(columns = {0: "size"})
         
         if (ab_count_df["size"].max() > 1):
-
             print(ab_count_df[ab_count_df.size >= 2])
-            sys.exit("Violating ANODE-BNODE combinations. Crashing program.")
+            sys.exit("Violating unique ANODE-BNODE constraint. Crashing program.")
 
+        # directional links must be valid
         hwylink_abb_df = hwylink_df[["ANODE", "BNODE", "ABB", "DIRECTIONS"]]
         hwylink_dup_df = pd.merge(hwylink_abb_df, hwylink_abb_df.copy(), left_on = ["ANODE", "BNODE"], right_on = ["BNODE", "ANODE"])
         directions_set = set(hwylink_dup_df.DIRECTIONS_x.to_list()) | set(hwylink_dup_df.DIRECTIONS_y.to_list())
         
         if directions_set != {'1'}:
-
             print(hwylink_dup_df[(hwylink_dup_df.DIRECTIONS_x != '1') | (hwylink_dup_df.DIRECTIONS_y != '1')])
             sys.exit("Violating directional link combinations. Crashing program.")
 
-        print("Base highway link feature class checked for errors.\n")
+        print("Base highway links and nodes checked for errors.\n")
         
     # function that checks the project table
     def check_base_project_table(self):
@@ -391,7 +417,7 @@ class HighwayNetwork:
                 if new_thrulanewidth2 < 0:
                     row_fail+=1
                     row[26] = 0
-                    row[27] = "Error: Through lanes width2 flag is not valid."
+                    row[27] = "Error: Through lanes width 2 flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if add_sigic not in [0, 1]:
@@ -606,6 +632,7 @@ class HighwayNetwork:
         else:
             error_file.write(f"No warnings about ACTION_CODE 2 + 4 overlapping.")
 
+        # check for links which are replaced but not deleted
         hwyproj_3_set = set(hwyproj_df[hwyproj_df.ACTION_CODE == "3"].ABB.to_list())
         hwyproj_rep_set = set(hwyproj_df[hwyproj_df.REP_ABB != "0-0-1"].REP_ABB.to_list())
 
@@ -635,7 +662,7 @@ if __name__ == "__main__":
     start_time = time.time()
     HN = HighwayNetwork()
     HN.generate_base_year()
-    HN.check_base_link_fc()
+    HN.check_base_fcs()
     HN.check_base_project_table()
 
     end_time = time.time()
