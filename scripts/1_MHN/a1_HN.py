@@ -185,7 +185,7 @@ class HighwayNetwork:
         print("Base year copied and prepared for modification.\n")
 
     # function that checks base links + nodes
-    def check_base_fcs(self):
+    def check_hwy_fcs(self):
 
         print("Checking base highway links and nodes for errors...")
 
@@ -203,7 +203,7 @@ class HighwayNetwork:
         all_node_set = set(hwynode_df.NODE.to_list())
         link_node_set = set(hwylink_df.ANODE.to_list()) | set(hwylink_df.BNODE.to_list())
 
-        # nodes should not be extraneous. 
+        # nodes should not be disconnected
         extra_nodes = all_node_set - link_node_set 
         
         if (len(extra_nodes) > 0):
@@ -237,7 +237,7 @@ class HighwayNetwork:
         print("Base highway links and nodes checked for errors.\n")
         
     # function that checks the project table
-    def check_base_project_table(self):
+    def check_hwy_project_table(self):
 
         print("Checking base project table for errors...")
         
@@ -593,7 +593,7 @@ class HighwayNetwork:
             # out of for loop
         
         # out of cursor
-        error_file.write("Individual row check:")
+        error_file.write("Individual row check:\n")
         if row_fail != 0:
             error_file.write(f"{row_fail} rows failed the individual row check and had USE set to 0. Check output gdb.\n")
         else:
@@ -662,8 +662,8 @@ if __name__ == "__main__":
     start_time = time.time()
     HN = HighwayNetwork()
     HN.generate_base_year()
-    HN.check_base_fcs()
-    HN.check_base_project_table()
+    HN.check_hwy_fcs()
+    HN.check_hwy_project_table()
 
     end_time = time.time()
     print(f"{round(end_time - start_time)}s to execute.")
