@@ -7,7 +7,7 @@
 ## 5) import_highway_projects_2.sas
 
 ## Author: npeterson
-## Translation by by ccai (2025)
+## Translation by ccai (2025)
 
 import os
 import shutil
@@ -182,8 +182,6 @@ class HighwayNetwork:
             field_type="TEXT",
             enforce_domains="NO_ENFORCE_DOMAINS")
 
-        self.get_hwy_dfs() # update the HN's current dfs 
-
         print("Base year copied and prepared for modification.\n")
 
     # function that checks base links 
@@ -212,13 +210,13 @@ class HighwayNetwork:
 
         print("Base highway link feature class checked for errors.\n")
         
-
     # function that checks the project table
     def check_base_project_table(self):
 
         print("Checking base project table for errors...")
         
         mhn_out_folder = self.mhn_out_folder
+        self.get_hwy_dfs() # update the HN's current dfs 
 
         base_project_table_errors = os.path.join(
             mhn_out_folder, 
@@ -240,7 +238,7 @@ class HighwayNetwork:
         hwyproj_df = self.hwyproj_df[self.hwyproj_df.COMPLETION_YEAR != 9999]
         hwyproj_coding_table = os.path.join(self.current_gdb, "hwyproj_coding")
 
-        # priority key check
+        # primary key check
         # check that no TIPID + ABB is duplicated. 
         hwyproj_group_df = hwyproj_df.groupby(["TIPID", "ABB"]).size().reset_index()
         hwyproj_group_df = hwyproj_group_df.rename(columns = {0: "size"})
@@ -261,7 +259,7 @@ class HighwayNetwork:
                     dup_fail+=1
                     ucursor.updateRow(row)
         
-        error_file.write("Priority key check:\n")
+        error_file.write("Primary key check:\n")
         if dup_fail != 0:
             error_file.write(f"{dup_fail} rows failed the duplicate check and had USE set to 0. Check output gdb.\n\n")
         else:
@@ -628,8 +626,6 @@ class HighwayNetwork:
             error_file.write(f"No warnings about replaced links not being deleted.")
 
         error_file.close()
-
-        self.get_hwy_dfs()
 
         print("Base highway project table checked for errors.\n")
 
