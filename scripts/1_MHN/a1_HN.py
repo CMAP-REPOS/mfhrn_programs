@@ -488,7 +488,7 @@ class HighwayNetwork:
                     continue
 
                 # if action code 2, REP_ABB must exist and also must be a regular link
-                reg_abbs = self.hwylink_df[self.hwlink_df.BASELINK == 1].ABB.to_list()
+                reg_abbs = self.hwylink_df[self.hwylink_df.BASELINK == 1].ABB.to_list()
                 if action_code == 2 and rep_abb not in reg_abbs:
                     row_fail+=1
                     row[26] = 0 
