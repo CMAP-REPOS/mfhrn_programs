@@ -106,7 +106,7 @@ class HighwayNetwork:
             columns = hwyproj_fields)
         
         hwyproj_years = os.path.join(self.current_gdb, "hwynet/hwyproj")
-        hwyproj_years_fields = ["TIPID", "COMPLETION_YEAR"]
+        hwyproj_years_fields = [f.name for f in arcpy.ListFields(hwyproj_years) if f.type != "Geometry"]
         self.hwyproj_years_df = pd.DataFrame(
             data = [row for row in arcpy.da.SearchCursor(hwyproj_years, hwyproj_years_fields)],
             columns = hwyproj_years_fields)
@@ -162,13 +162,9 @@ class HighwayNetwork:
             field_type="TEXT",
             enforce_domains="NO_ENFORCE_DOMAINS")
         
-        arcpy.management.JoinField(hwyproj_coding_table, "TIPID", hwyproj_year_fc, "TIPID")
-        arcpy.management.AddField(hwyproj_coding_table, "USE", "SHORT")
+        arcpy.management.JoinField(hwyproj_coding_table, "TIPID", hwyproj_year_fc, "TIPID", "COMPLETION_YEAR")
+        arcpy.management.AddFields(hwyproj_coding_table, [["USE", "SHORT"], ["NOTES", "TEXT"]])
         arcpy.management.CalculateField(hwyproj_coding_table, "USE", "1")
-        arcpy.management.DeleteField(
-            hwyproj_coding_table, 
-            ["TIPID_1", "MCP_ID", "RSP_ID", "Shape_Length"])
-        arcpy.management.AddField(hwyproj_coding_table, "NOTES", "TEXT")
 
         # add fields to review updates (a la Volpe)
         hwylink_fc = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
