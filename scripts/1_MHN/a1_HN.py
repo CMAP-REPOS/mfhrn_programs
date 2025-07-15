@@ -31,7 +31,7 @@ class HighwayNetwork:
 
         self.mhn_out_folder = os.path.join(mfhrn_path, "output", "1_MHN")
         
-        years_csv_path = os.path.join(self.in_folder, "years.csv")
+        years_csv_path = os.path.join(self.in_folder, "output_years.csv")
         self.years_list = pd.read_csv(years_csv_path)["years"].to_list()
 
         # highway files - names of feature classes + tables in MHN
@@ -487,8 +487,9 @@ class HighwayNetwork:
                     ucursor.updateRow(row)
                     continue
 
-                # if action code 2, REP_ABB must exist 
-                if action_code == 2 and rep_abb not in abbs:
+                # if action code 2, REP_ABB must exist and also must be a regular link
+                reg_abbs = self.hwylink_df[self.hwlink_df.BASELINK == 1].ABB.to_list()
+                if action_code == 2 and rep_abb not in reg_abbs:
                     row_fail+=1
                     row[26] = 0 
                     row[27] = "Error: Action code 2 must be associated with a valid REP_ABB."
@@ -655,6 +656,7 @@ class HighwayNetwork:
         error_file.close()
 
         print("Base highway project table checked for errors.\n")
+
 
 # main function for testing 
 if __name__ == "__main__":

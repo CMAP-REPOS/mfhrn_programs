@@ -1,7 +1,6 @@
 _misc/
 
 input/MHN.gdb
-input/years.csv
 
 output/
 *__pycache__*
