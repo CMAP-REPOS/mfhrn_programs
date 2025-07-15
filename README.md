@@ -10,7 +10,7 @@ The boxes represent input while the circles represent output. As you can see fro
 To get started with this repository, check out the wiki. 
 
 ## Objectives 
-This repository contains scripts and tools where the MFN (and any other necessary files) can be processed together for input into either the freight model or travel model for analysis. 
+This repository contains scripts and tools where the MFN (and any other necessary files) can be processed for input into either the freight model or travel model for analysis. 
 
 There are four main objectives:
 1. Currently there are three separate repositories for the MFN, MHN, and MRN, with overlap between the three. This repository attempts to rewrite the original MHN repository while considering its place in the overall process.
