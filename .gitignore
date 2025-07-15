@@ -1,7 +1,6 @@
 _misc/
 
-input/MHN.gdb
-
+input/
 
 output/
 *__pycache__*
