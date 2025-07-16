@@ -766,6 +766,7 @@ class HighwayNetwork:
                 where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
                 where_clause += "AND ACTION_CODE = '1'"
 
+                # if modified and modified again
                 with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
                     for row in ucursor:
                         row[2] = 0 if int(row[2]) == new_directions else row[2]
@@ -790,6 +791,7 @@ class HighwayNetwork:
                         row[27] = f"Modified in {current_year}"
                         ucursor.updateRow(row)
 
+                # if modified and deleted- no impact
                 where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1 "
                 where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
                 where_clause += "AND ACTION_CODE = '3'"
@@ -824,8 +826,9 @@ class HighwayNetwork:
 
                 project = action[0]
                 rep_abb = action[1]
-                abb_list = list(map(to_sql_string, inverted_2_dict[action]))
-                abb_string = ", ".join(abb_list)
+                abb_list = inverted_2_dict[action]
+                abb_list_string = list(map(to_sql_string, abb_list))
+                abb_string = ", ".join(abb_list_string)
 
                 directions = "0"
                 type1 = "0"
@@ -914,32 +917,158 @@ class HighwayNetwork:
                         row[37] = f"Replaced {rep_abb} in {current_year}"
                         ucursor.updateRow(row)
 
-                # for abb in abb_list:
+                for abb in abb_list:
 
-                #     # if you replaced a link once, you can't replace it again
-                #     where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1 "
-                #     where_clause += f"AND ABB = {abb} AND COMPLETION_YEAR > {current_year} "
-                #     where_clause += "AND ACTION_CODE = '2'"
+                    # if you replaced a link once, you can't replace it again
+                    where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1 "
+                    where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
+                    where_clause += "AND ACTION_CODE = '2'"
                     
-                #     with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
-                #         for row in ucursor: 
+                    with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
+                        for row in ucursor: 
 
-                #             row[26] = 0
-                #             row[27] = f"Replaced {rep_abb} in {current_year}"
+                            row[26] = 0
+                            row[27] = f"Replaced {rep_abb} in {current_year}"
 
-                #             ucursor.updateRow(row)
+                            ucursor.updateRow(row)
 
-                #     # if you replaced a link, you can't add it - only modify
-                #     where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1 "
-                #     where_clause += f"AND ABB = {abb} AND COMPLETION_YEAR > {current_year} "
-                #     where_clause += "AND ACTION_CODE = '4'"
+                    # if you replaced a link, you can't add it - only modify
+                    where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1 "
+                    where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
+                    where_clause += "AND ACTION_CODE = '4'"
 
-                #     with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
-                #         for row in ucursor: 
+                    with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
+                        for row in ucursor: 
 
-                #             row[27] = f"Replaced {rep_abb} in {current_year}"
+                            row[1] = 1 # new action code - 1 
 
-                #             ucursor.updateRow(row)
+                            row[2] = 0 if row[2] == directions else row[2]
+                            row[3] = 0 if row[3] == type1 else row[3]
+                            row[4] = 0 if row[4] == type2 else row[4]
+                            row[5] = 0 if row[5] == ampm1 else row[5]
+                            row[6] = 0 if row[6] == ampm2 else row[6]
+                            row[7] = 0 if row[7] == postedspeed1 else row[7]
+                            row[8] = 0 if row[8] == postedspeed2 else row[8]
+                            row[9] = 0 if row[9] == thrulanes1 else row[9]
+                            row[10] = 0 if row[10] == thrulanes2 else row[10]
+                            row[11] = 0 if row[11] == thrulanewidth1 else row[11]
+                            row[12] = 0 if row[12] == thrulanewidth2 else row[12]
+                            row[13] = row[13] - parklanes1 if row[13] != 0 else 0
+                            row[14] = row[14] - parklanes2 if row[14] != 0 else 0
+                            row[15] = 0 if row[15] == sigic else row[15]
+                            row[16] = 0 if row[16] == cltl else row[16]
+                            row[17] = 0 if row[17] == rrgradecross else row[17]
+                            row[18] = 0 if row[18] == tolldollars else row[18]
+                            row[19] = 0 if row[19] == modes else row[19]
+          
+                            row[27] = f"Replaced {rep_abb} in {current_year}"
+
+                            ucursor.updateRow(row)
+
+        if len(action_3_dict) > 0:
+            
+            for action in action_3_dict:
+
+                project = action[0]
+                abb = action[1]
+
+                directions = "0"
+                type1 = "0"
+                type2 = "0"
+                ampm1 = "0"
+                ampm2 = "0"
+                postedspeed1 = 0 
+                postedspeed2 = 0
+                thrulanes1 = 0
+                thrulanes2 = 0
+                thrulanewidth1 = 0
+                thrulanewidth2 = 0
+                parklanes1 = 0
+                parklanes2 = 0
+                sigic = 0
+                cltl = 0
+                rrgradecross = 0
+                tolldollars = 0
+                modes = "0"
+
+                # set to skeleton link
+                where_clause = f"ABB = '{abb}'"
+                with arcpy.da.UpdateCursor(hwylink_fc, link_fields, where_clause) as ucursor:
+                    for row in ucursor:
+
+                        directions = row[2]
+                        type1 = row[3]
+                        type2 = row[4]
+                        ampm1 = row[5]
+                        ampm2 = row[6]
+                        postedspeed1 = row[7]
+                        postedspeed2 = row[8]
+                        thrulanes1 = row[9]
+                        thrulanes2 = row[10]
+                        thrulanewidth1 = row[11]
+                        thrulanewidth2 = row[12]
+                        parklanes1 = row[13]
+                        parklanes2 = row[14]
+                        sigic = row[17]
+                        cltl = row[18]
+                        rrgradecross = row[19]
+                        tolldollars = row[21]
+                        modes = row[22]
+
+                        row[35] = 0
+                        row[36] = project
+                        row[37] = f"Deleted in {current_year}"
+
+                        ucursor.updateRow(row)
+
+                # if a link is deleted, it cannot be modified or deleted again
+                where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1 "
+                where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
+                where_clause += "AND ACTION_CODE in ('1', '3')"
+
+                with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
+                    for row in ucursor:
+                        row[26] = 0 
+                        row[27] = f"Deleted in {current_year}"
+
+                        ucursor.updateRow(row)
+
+                where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1 "
+                where_clause += f"AND REP_ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
+                where_clause += "AND ACTION_CODE = '2'"
+
+                # if a link is deleted
+                # a skeleton that replaces it, is now added 
+                with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
+                    for row in ucursor:
+
+                        row[1] = 4 # becomes add 
+
+                        row[2] = directions
+                        row[3] = type1
+                        row[4] = type2
+                        row[5] = ampm1
+                        row[6] = ampm2
+                        row[7] = postedspeed1
+                        row[8] = postedspeed2
+                        row[9] = thrulanes1
+                        row[10] = thrulanes2
+                        row[11] = thrulanewidth1
+                        row[12] = thrulanewidth2
+                        row[13] = parklanes1
+                        row[14] = parklanes2
+                        row[15] = sigic
+                        row[16] = cltl
+                        row[17] = rrgradecross
+                        row[18] = tolldollars
+                        row[19] = modes
+                        
+                        row[22] = 0 # rep_anode = 0
+                        row[23] = 0 # rep_bnode = 0
+
+                        row[27] = f"Deleted replacement link in {current_year}"
+
+                        ucursor.updateRow(row)
 
         self.base_year = current_year
 
