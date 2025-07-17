@@ -114,8 +114,10 @@ class HighwayNetwork:
     def del_rcs(self):
 
         for rc in self.rel_classes:
+
             rc_path = os.path.join(self.current_gdb, rc)
-            arcpy.management.Delete(rc_path)
+            if arcpy.Exists(rc_path):
+                arcpy.management.Delete(rc_path)
 
     # helper function to delete bus files
     def del_bus(self):
@@ -704,11 +706,11 @@ class HighwayNetwork:
                 abb = action[1]
 
                 edits = action_1_dict[action]
-                new_directions = int(edits["NEW_DIRECTIONS"])
-                new_type1 = int(edits["NEW_TYPE1"])
-                new_type2 = int(edits["NEW_TYPE2"])
-                new_ampm1 = int(edits["NEW_AMPM1"])
-                new_ampm2 = int(edits["NEW_AMPM2"])
+                new_directions = edits["NEW_DIRECTIONS"]
+                new_type1 = edits["NEW_TYPE1"]
+                new_type2 = edits["NEW_TYPE2"]
+                new_ampm1 = edits["NEW_AMPM1"]
+                new_ampm2 = edits["NEW_AMPM2"]
                 new_postedspeed1 = edits["NEW_POSTEDSPEED1"]
                 new_postedspeed2 = edits["NEW_POSTEDSPEED2"]
                 new_thrulanes1 = edits["NEW_THRULANES1"]
@@ -721,17 +723,17 @@ class HighwayNetwork:
                 add_cltl = edits["ADD_CLTL"]
                 add_rrgradecross = edits["ADD_RRGRADECROSS"]
                 new_tolldollars = edits["NEW_TOLLDOLLARS"]
-                new_modes = int(edits["NEW_MODES"])
+                new_modes = edits["NEW_MODES"]
 
                 where_clause = f"ABB = '{abb}'"
                 with arcpy.da.UpdateCursor(hwylink_fc, link_fields, where_clause) as ucursor:
                     for row in ucursor:
 
-                        row[2] = new_directions if new_directions != 0 else row[2]
-                        row[3] = new_type1 if new_type1 != 0 else row[3]
-                        row[4] = new_type2 if new_type2 != 0 else row[4]
-                        row[5] = new_ampm1 if new_ampm1 != 0 else row[5]
-                        row[6] = new_ampm2 if new_ampm2 != 0 else row[6]
+                        row[2] = new_directions if new_directions != "0" else row[2]
+                        row[3] = new_type1 if new_type1 != "0" else row[3]
+                        row[4] = new_type2 if new_type2 != "0" else row[4]
+                        row[5] = new_ampm1 if new_ampm1 != "0" else row[5]
+                        row[6] = new_ampm2 if new_ampm2 != "0" else row[6]
                         row[7] = new_postedspeed1 if new_postedspeed1 != 0 else row[7]
                         row[8] = new_postedspeed2 if new_postedspeed2 != 0 else row[8]
                         row[9] = new_thrulanes1 if new_thrulanes1 != 0 else row[9]
@@ -744,15 +746,15 @@ class HighwayNetwork:
                         row[18] = min(max((row[18] + add_cltl), 0), 1)
                         row[19] = min(max((row[19] + add_rrgradecross), 0), 1)
                         row[21] = new_tolldollars if new_tolldollars != 0 else row[21]
-                        row[22] = new_modes if new_modes != 0 else row[22]
+                        row[22] = new_modes if new_modes != "0" else row[22]
                         row[36] = project
                         row[37] = f"Modified in {current_year}"
 
                         # if directions = 1 or 2
                         # empty all "2" fields
                         if row[2] in ["1", "2"]:
-                            row[4] = 0
-                            row[6] = 0
+                            row[4] = "0"
+                            row[6] = "0"
                             row[8] = 0
                             row[10] = 0
                             row[12] = 0
@@ -770,11 +772,11 @@ class HighwayNetwork:
                 # if modified and modified again
                 with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
                     for row in ucursor:
-                        row[2] = 0 if int(row[2]) == new_directions else row[2]
-                        row[3] = 0 if int(row[3]) == new_type1 else row[3]
-                        row[4] = 0 if int(row[4]) == new_type2 else row[4]
-                        row[5] = 0 if int(row[5]) == new_ampm1 else row[5]
-                        row[6] = 0 if int(row[6]) == new_ampm2 else row[6]
+                        row[2] = "0" if row[2] == new_directions else row[2]
+                        row[3] = "0" if row[3] == new_type1 else row[3]
+                        row[4] = "0" if row[4] == new_type2 else row[4]
+                        row[5] = "0" if row[5] == new_ampm1 else row[5]
+                        row[6] = "0" if row[6] == new_ampm2 else row[6]
                         row[7] = 0 if row[7] == new_postedspeed1 else row[7]
                         row[8] = 0 if row[8] == new_postedspeed2 else row[8]
                         row[9] = 0 if row[9] == new_thrulanes1 else row[9]
@@ -787,7 +789,7 @@ class HighwayNetwork:
                         row[16] = 0 if row[16] == add_cltl else row[16]
                         row[17] = 0 if row[17] == add_rrgradecross else row[17]
                         row[18] = 0 if row[18] == new_tolldollars else row[18]
-                        row[19] = 0 if int(row[19]) == new_modes else row[19]
+                        row[19] = "0" if row[19] == new_modes else row[19]
 
                         row[27] = f"Modified in {current_year}"
                         ucursor.updateRow(row)
@@ -941,7 +943,7 @@ class HighwayNetwork:
                     with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
                         for row in ucursor: 
 
-                            row[1] = 1 # new action code - 1 
+                            row[1] = "1" # new action code - 1 
 
                             row[2] = 0 if row[2] == directions else row[2]
                             row[3] = 0 if row[3] == type1 else row[3]
@@ -1073,7 +1075,100 @@ class HighwayNetwork:
 
         if len(action_4_dict) > 0:
 
-            pass
+            for action in action_4_dict:
+
+                project = action[0]
+                abb = action[1]
+
+                edits = action_4_dict[action]
+                new_directions = edits["NEW_DIRECTIONS"]
+                new_type1 = edits["NEW_TYPE1"]
+                new_type2 = edits["NEW_TYPE2"]
+                new_ampm1 = edits["NEW_AMPM1"]
+                new_ampm2 = edits["NEW_AMPM2"]
+                new_postedspeed1 = edits["NEW_POSTEDSPEED1"]
+                new_postedspeed2 = edits["NEW_POSTEDSPEED2"]
+                new_thrulanes1 = edits["NEW_THRULANES1"]
+                new_thrulanes2 = edits["NEW_THRULANES2"]
+                new_thrulanewidth1 = edits["NEW_THRULANEWIDTH1"]
+                new_thrulanewidth2 = edits["NEW_THRULANEWIDTH2"]
+                add_parklanes1 = edits["ADD_PARKLANES1"]
+                add_parklanes2 = edits["ADD_PARKLANES2"]
+                add_sigic = edits["ADD_SIGIC"]
+                add_cltl = edits["ADD_CLTL"]
+                add_rrgradecross = edits["ADD_RRGRADECROSS"]
+                new_tolldollars = edits["NEW_TOLLDOLLARS"]
+                new_modes = edits["NEW_MODES"]
+
+                where_clause = f"ABB = '{abb}'"
+                with arcpy.da.UpdateCursor(hwylink_fc, link_fields, where_clause) as ucursor:
+                    for row in ucursor:
+                        row[2] = new_directions
+                        row[3] = new_type1
+                        row[4] = new_type2
+                        row[5] = new_ampm1
+                        row[6] = new_ampm2
+                        row[7] = new_postedspeed1
+                        row[8] = new_postedspeed2
+                        row[9] = new_thrulanes1
+                        row[10] = new_thrulanes2
+                        row[11] = new_thrulanewidth1
+                        row[12] = new_thrulanewidth2
+                        row[13] = add_parklanes1
+                        row[14] = add_parklanes2
+                        row[17] = add_sigic
+                        row[18] = add_cltl
+                        row[19] = add_rrgradecross
+                        row[21] = new_tolldollars
+                        row[22] = new_modes
+
+                        row[35] = 1
+                        row[36] = project
+                        row[37] = f"Added in {current_year}"
+
+                        ucursor.updateRow(row)
+
+                # if added can't be replaced
+                where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1 "
+                where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
+                where_clause += "AND ACTION_CODE = '2'"
+                with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
+                    for row in ucursor:
+
+                        row[26] = 0
+                        row[27] = f"Added in {current_year}"
+                        ucursor.updateRow(row)
+
+                # if added can't be added again 
+                where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1 "
+                where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
+                where_clause += "AND ACTION_CODE = '4'"
+                with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
+                    for row in ucursor:
+
+                        row[1] = "1"
+                        
+                        row[2] = "0" if row[2] == new_directions else row[2]
+                        row[3] = "0" if row[3] == new_type1 else row[3]
+                        row[4] = "0" if row[4] == new_type2 else row[4]
+                        row[5] = "0" if row[5] == new_ampm1 else row[5]
+                        row[6] = "0" if row[6] == new_ampm2 else row[6]
+                        row[7] = 0 if row[7] == new_postedspeed1 else row[7]
+                        row[8] = 0 if row[8] == new_postedspeed2 else row[8]
+                        row[9] = 0 if row[9] == new_thrulanes1 else row[9]
+                        row[10] = 0 if row[10] == new_thrulanes2 else row[10]
+                        row[11] = 0 if row[11] == new_thrulanewidth1 else row[11]
+                        row[12] = 0 if row[12] == new_thrulanewidth2 else row[12]
+                        row[13] = row[13] - add_parklanes1
+                        row[14] = row[14] - add_parklanes2
+                        row[15] = 0 if row[15] == add_sigic else row[15]
+                        row[16] = 0 if row[16] == add_cltl else row[16]
+                        row[17] = 0 if row[17] == add_rrgradecross else row[17]
+                        row[18] = 0 if row[18] == new_tolldollars else row[18]
+                        row[19] = "0" if row[19] == new_modes else row[19]
+
+                        row[27] = f"Added in {current_year}"
+                        ucursor.updateRow(row)
         
         self.base_year = current_year
 
@@ -1090,6 +1185,22 @@ class HighwayNetwork:
             if year > self.base_year: 
                 build_years.append(year)
         build_years.sort()
+
+        final_year = max(build_years)
+
+        # create a combined gdb to store + check final output 
+        mhn_all_name = "MHN_all.gdb"
+        mhn_all_gdb = os.path.join(mhn_out_folder, mhn_all_name)
+        arcpy.management.CreateFileGDB(mhn_out_folder, mhn_all_name)
+
+        # add the projects which will be applied 
+        arcpy.management.CreateFeatureclass(mhn_all_gdb, "projects_applied", "POLYLINE", spatial_reference = 26771)
+        projects_applied = os.path.join(mhn_all_gdb, "projects_applied")
+
+        hwyproj = os.path.join(self.current_gdb, "hwyproj_coding")
+        hwyproj_fields = [[f.name, f.type] for f in arcpy.ListFields(hwyproj) if (f.name != "OBJECTID")]
+
+        arcpy.management.AddFields(projects_applied, hwyproj_fields)
         
         for build_year in build_years:
 
@@ -1098,12 +1209,10 @@ class HighwayNetwork:
             arcpy.management.Copy(self.current_gdb, next_gdb)
             self.current_gdb = next_gdb
 
-            # print(self.base_year, build_year)
+            for year in range(self.base_year, build_year):
+                self.hwy_forward_one_year()
 
-            #for year in range(self.base_year, build_year):
-            self.hwy_forward_one_year()
-
-            #self.base_year = self.build_year
+        print("All years built.\n")
 
 # main function for testing 
 if __name__ == "__main__":

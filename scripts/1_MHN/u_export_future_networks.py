@@ -3,7 +3,7 @@
 ## Author: npeterson
 ## Translated + Updated by ccai (2025)
 
-from a1_HN import HighwayNetwork
+from a_HN import HighwayNetwork
 
 import sys
 import argparse
