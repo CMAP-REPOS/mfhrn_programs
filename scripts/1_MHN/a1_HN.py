@@ -27,7 +27,8 @@ class HighwayNetwork:
         mfhrn_path = os.path.dirname(os.path.dirname(os.path.dirname(abs_path)))
         
         self.in_folder = os.path.join(mfhrn_path, "input")
-        self.in_gdb = os.path.join(self.in_folder, "MHN.gdb")
+        self.mhn_in_folder = os.path.join(self.in_folder, "1_MHN")
+        self.in_gdb = os.path.join(self.mhn_in_folder, "MHN.gdb")
 
         self.mhn_out_folder = os.path.join(mfhrn_path, "output", "1_MHN")
         
@@ -932,7 +933,7 @@ class HighwayNetwork:
 
                             ucursor.updateRow(row)
 
-                    # if you replaced a link, you can't add it - only modify
+                    # if you replaced a link, you can't add it again - only modify
                     where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1 "
                     where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
                     where_clause += "AND ACTION_CODE = '4'"
@@ -991,7 +992,7 @@ class HighwayNetwork:
                 tolldollars = 0
                 modes = "0"
 
-                # set to skeleton link
+                # set to skeleton link but get attributes
                 where_clause = f"ABB = '{abb}'"
                 with arcpy.da.UpdateCursor(hwylink_fc, link_fields, where_clause) as ucursor:
                     for row in ucursor:
@@ -1070,6 +1071,10 @@ class HighwayNetwork:
 
                         ucursor.updateRow(row)
 
+        if len(action_4_dict) > 0:
+
+            pass
+        
         self.base_year = current_year
 
     # function that builds future highways
@@ -1084,22 +1089,21 @@ class HighwayNetwork:
         for year in years:
             if year > self.base_year: 
                 build_years.append(year)
-
         build_years.sort()
         
-        for scenario_year in build_years:
+        for build_year in build_years:
 
-            print(f"Building highway network for {scenario_year}...")
-            next_gdb = os.path.join(mhn_out_folder, f"MHN_{scenario_year}.gdb")
+            print(f"Building highway network for {build_year}...")
+            next_gdb = os.path.join(mhn_out_folder, f"MHN_{build_year}.gdb")
             arcpy.management.Copy(self.current_gdb, next_gdb)
             self.current_gdb = next_gdb
 
-            # print(self.base_year, scenario_year)
+            # print(self.base_year, build_year)
 
-            #for year in range(self.base_year, scenario_year):
+            #for year in range(self.base_year, build_year):
             self.hwy_forward_one_year()
 
-            #self.base_year = self.scenario_year
+            #self.base_year = self.build_year
 
 # main function for testing 
 if __name__ == "__main__":
