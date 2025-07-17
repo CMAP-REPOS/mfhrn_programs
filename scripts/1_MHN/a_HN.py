@@ -33,7 +33,7 @@ class HighwayNetwork:
         self.mhn_out_folder = os.path.join(mfhrn_path, "output", "1_MHN")
         
         years_csv_path = os.path.join(self.in_folder, "input_years.csv")
-        self.years_list = pd.read_csv(years_csv_path)["years"].to_list()
+        years_list_raw = pd.read_csv(years_csv_path)["years"].to_list()
 
         # highway files - names of feature classes + tables in MHN
         self.hwy_files = [
@@ -82,6 +82,14 @@ class HighwayNetwork:
         self.get_hwy_dfs()
 
         self.base_year = min(self.hwyproj_years_df.COMPLETION_YEAR.to_list()) - 1
+
+        years_list = []
+        for year in years_list_raw:
+            if year > self.base_year: 
+                years_list.append(year)
+        years_list.sort()
+
+        self.years_list = years_list
 
     # helper function to get dfs 
     def get_hwy_dfs(self):
@@ -1173,18 +1181,12 @@ class HighwayNetwork:
         self.base_year = current_year
 
     # function that builds future highways
-    def build_future_hwys(self, subset = None, years = None):
+    def build_future_hwys(self, subset = None, build_years = None):
 
         mhn_out_folder = self.mhn_out_folder
 
-        if years == None: 
-            years = self.years_list
-
-        build_years = []
-        for year in years:
-            if year > self.base_year: 
-                build_years.append(year)
-        build_years.sort()
+        if build_years == None: 
+            build_years = self.years_list
 
         final_year = max(build_years)
 
@@ -1194,14 +1196,41 @@ class HighwayNetwork:
         arcpy.management.CreateFileGDB(mhn_out_folder, mhn_all_name)
 
         # add the projects which will be applied 
-        arcpy.management.CreateFeatureclass(mhn_all_gdb, "projects_applied", "POLYLINE", spatial_reference = 26771)
-        projects_applied = os.path.join(mhn_all_gdb, "projects_applied")
+        arcpy.management.CreateFeatureclass(mhn_all_gdb, "hwyproj_applied", "POLYLINE", spatial_reference = 26771)
+        hwyproj_applied = os.path.join(mhn_all_gdb, "hwyproj_applied")
 
         hwyproj = os.path.join(self.current_gdb, "hwyproj_coding")
         hwyproj_fields = [[f.name, f.type] for f in arcpy.ListFields(hwyproj) if (f.name != "OBJECTID")]
+        hwyproj_fields_2 = [f.name for f in arcpy.ListFields(hwyproj) if (f.name != ("OBJECTID"))]
 
-        arcpy.management.AddFields(projects_applied, hwyproj_fields)
+        arcpy.management.AddFields(hwyproj_applied, hwyproj_fields)
+
+        where_clause = f"USE = 1 AND COMPLETION_YEAR <= {final_year}"
+        with arcpy.da.SearchCursor(hwyproj, hwyproj_fields_2, where_clause) as scursor:
+            with arcpy.da.InsertCursor(hwyproj_applied, hwyproj_fields_2) as icursor:
+
+                for row in scursor:
+                    icursor.insertRow(row)
+
+        geom_fields = ["SHAPE@", "ABB"]
+        hwylink = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
         
+        with arcpy.da.UpdateCursor(hwyproj_applied, geom_fields) as ucursor:
+            for u_row in ucursor:
+
+                abb = u_row[1]
+
+                geom = None
+                where_clause = f"ABB = '{abb}'"
+
+                with arcpy.da.SearchCursor(hwylink, geom_fields, where_clause) as scursor:
+                    for s_row in scursor:
+
+                        geom = s_row[0]
+
+                ucursor.updateRow([geom, abb])
+        
+        # build the future highways 
         for build_year in build_years:
 
             print(f"Building highway network for {build_year}...")
