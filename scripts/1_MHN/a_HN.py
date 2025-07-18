@@ -9,6 +9,7 @@
 ## Author: npeterson
 ## Translated by ccai (2025)
 
+import math
 import os
 import shutil
 import sys
@@ -90,6 +91,7 @@ class HighwayNetwork:
         years_list.sort()
 
         self.years_list = years_list
+        self.built_gdbs = []
 
     # helper function to get dfs 
     def get_hwy_dfs(self):
@@ -134,6 +136,20 @@ class HighwayNetwork:
             bus_path = os.path.join(self.current_gdb, bus_file)
             arcpy.management.Delete(bus_path)
     
+    # helper function that copies a gdb
+    def copy_gdb_safe(self, input_gdb, output_gdb):
+        while True:
+            try: 
+                if arcpy.Exists(output_gdb):
+                    arcpy.management.Delete(output_gdb)
+                
+                arcpy.management.Copy(input_gdb, output_gdb)
+            except:
+                print("Copying GDB failed. Trying again...")
+                pass
+            else:
+                break
+
     # function that generates base year gdb
     def generate_base_year(self):
 
@@ -153,8 +169,10 @@ class HighwayNetwork:
 
         # copy GDB
         out_gdb = os.path.join(mhn_out_folder, f"MHN_{base_year}.gdb")
-        arcpy.management.Copy(in_gdb, out_gdb)
+        self.copy_gdb_safe(in_gdb, out_gdb)
         self.current_gdb = out_gdb # update the HN's current gdb 
+
+        self.built_gdbs.append(self.current_gdb)
 
         self.del_rcs()
         hwyproj_coding_table = os.path.join(self.current_gdb, "hwyproj_coding")
@@ -275,7 +293,7 @@ class HighwayNetwork:
         # projects with year 9999 are not well maintained 
         # only check integrity if != 9999
 
-        hwyproj_df = self.hwyproj_df[self.hwyproj_df.COMPLETION_YEAR != 9999]
+        hwyproj_df = self.hwyproj_df
         hwyproj_coding_table = os.path.join(self.current_gdb, "hwyproj_coding")
 
         # primary key check
@@ -312,7 +330,7 @@ class HighwayNetwork:
         row_fail = 0
         row_warning = 0
         fields = [f.name for f in arcpy.ListFields(hwyproj_coding_table) if f.name != "OBJECTID"]
-        where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1"
+        where_clause = "USE = 1"
         with arcpy.da.UpdateCursor(hwyproj_coding_table, fields, where_clause) as ucursor:
             for row in ucursor:
                 tipid = row[0] 
@@ -678,6 +696,69 @@ class HighwayNetwork:
 
         print("Base highway project table checked for errors.\n")
 
+    # function that creates a gdb of all built years 
+    def create_combined_gdb(self, final_year):
+
+        print("Creating combined gdb...")
+
+        mhn_out_folder = self.mhn_out_folder
+
+        # create a combined gdb to store + check final output 
+        mhn_all_name = "MHN_all.gdb"
+        mhn_all_gdb = os.path.join(mhn_out_folder, mhn_all_name)
+        arcpy.management.CreateFileGDB(mhn_out_folder, mhn_all_name)
+
+        # make an fc of the projects which will be applied 
+        arcpy.management.CreateFeatureclass(mhn_all_gdb, "hwyproj_applied", "POLYLINE", spatial_reference = 26771)
+        hwyproj_applied = os.path.join(mhn_all_gdb, "hwyproj_applied")
+
+        hwyproj = os.path.join(self.current_gdb, "hwyproj_coding")
+        hwyproj_fields = [[f.name, f.type] for f in arcpy.ListFields(hwyproj) if (f.name != "OBJECTID")]
+        hwyproj_fields_2 = [f.name for f in arcpy.ListFields(hwyproj) if (f.name != ("OBJECTID"))]
+
+        arcpy.management.AddFields(hwyproj_applied, hwyproj_fields)
+
+        where_clause = f"USE = 1 AND COMPLETION_YEAR <= {final_year}"
+        with arcpy.da.SearchCursor(hwyproj, hwyproj_fields_2, where_clause) as scursor:
+            with arcpy.da.InsertCursor(hwyproj_applied, hwyproj_fields_2) as icursor:
+
+                for row in scursor:
+                    icursor.insertRow(row)
+
+        geom_fields = ["SHAPE@", "ABB"]
+        hwylink = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
+        
+        with arcpy.da.UpdateCursor(hwyproj_applied, geom_fields) as ucursor:
+            for u_row in ucursor:
+
+                abb = u_row[1]
+
+                geom = None
+                where_clause = f"ABB = '{abb}'"
+
+                with arcpy.da.SearchCursor(hwylink, geom_fields, where_clause) as scursor:
+                    for s_row in scursor:
+
+                        geom = s_row[0]
+
+                ucursor.updateRow([geom, abb])
+
+        # make an fc of the links which had multiple updates 
+        hwyproj_multiple = os.path.join(mhn_all_gdb, "hwyproj_multiple")
+        arcpy.management.Sort(hwyproj_applied, hwyproj_multiple, "COMPLETION_YEAR")
+
+        hwyproj_df = self.hwyproj_df
+        hwyproj_df_use = hwyproj_df[(hwyproj_df.USE == 1) & (hwyproj_df.COMPLETION_YEAR <= final_year)]
+        hwyproj_multiple_dict = hwyproj_df_use.ABB.value_counts()[hwyproj_df_use.ABB.value_counts() >= 2].to_dict()
+
+        with arcpy.da.UpdateCursor(hwyproj_multiple, "ABB") as ucursor:
+            for row in ucursor:
+
+                if row[0] not in hwyproj_multiple_dict:
+                    ucursor.deleteRow()
+        
+        print("Combined gdb created.\n")
+
     # function that moves the base year up one year
     def hwy_forward_one_year(self):
         
@@ -773,7 +854,7 @@ class HighwayNetwork:
 
                         ucursor.updateRow(row)
 
-                where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1 "
+                where_clause = "USE = 1 "
                 where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
                 where_clause += "AND ACTION_CODE = '1'"
 
@@ -803,7 +884,7 @@ class HighwayNetwork:
                         ucursor.updateRow(row)
 
                 # if modified and deleted- no impact
-                where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1 "
+                where_clause = "USE = 1 "
                 where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
                 where_clause += "AND ACTION_CODE = '3'"
                 with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
@@ -923,7 +1004,7 @@ class HighwayNetwork:
                         row[29] = vclearance
                         row[32] = meso
 
-                        row[35] = 1
+                        row[35] = "1"
                         row[36] = project
                         row[37] = f"Replaced {rep_abb} in {current_year}"
                         ucursor.updateRow(row)
@@ -931,7 +1012,7 @@ class HighwayNetwork:
                 for abb in abb_list:
 
                     # if you replaced a link once, you can't replace it again
-                    where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1 "
+                    where_clause = "USE = 1 "
                     where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
                     where_clause += "AND ACTION_CODE = '2'"
                     
@@ -944,7 +1025,7 @@ class HighwayNetwork:
                             ucursor.updateRow(row)
 
                     # if you replaced a link, you can't add it again - only modify
-                    where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1 "
+                    where_clause = "USE = 1 "
                     where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
                     where_clause += "AND ACTION_CODE = '4'"
 
@@ -1026,14 +1107,14 @@ class HighwayNetwork:
                         tolldollars = row[21]
                         modes = row[22]
 
-                        row[35] = 0
+                        row[35] = "0"
                         row[36] = project
                         row[37] = f"Deleted in {current_year}"
 
                         ucursor.updateRow(row)
 
                 # if a link is deleted, it cannot be modified or deleted again
-                where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1 "
+                where_clause = "USE = 1 "
                 where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
                 where_clause += "AND ACTION_CODE in ('1', '3')"
 
@@ -1044,7 +1125,7 @@ class HighwayNetwork:
 
                         ucursor.updateRow(row)
 
-                where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1 "
+                where_clause = "USE = 1 "
                 where_clause += f"AND REP_ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
                 where_clause += "AND ACTION_CODE = '2'"
 
@@ -1130,14 +1211,14 @@ class HighwayNetwork:
                         row[21] = new_tolldollars
                         row[22] = new_modes
 
-                        row[35] = 1
+                        row[35] = "1"
                         row[36] = project
                         row[37] = f"Added in {current_year}"
 
                         ucursor.updateRow(row)
 
                 # if added can't be replaced
-                where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1 "
+                where_clause = "USE = 1 "
                 where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
                 where_clause += "AND ACTION_CODE = '2'"
                 with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
@@ -1148,7 +1229,7 @@ class HighwayNetwork:
                         ucursor.updateRow(row)
 
                 # if added can't be added again 
-                where_clause = "COMPLETION_YEAR <> 9999 AND USE = 1 "
+                where_clause = "USE = 1 "
                 where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
                 where_clause += "AND ACTION_CODE = '4'"
                 with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
@@ -1178,6 +1259,15 @@ class HighwayNetwork:
                         row[27] = f"Added in {current_year}"
                         ucursor.updateRow(row)
         
+        # set use on all projects completed this year to 0 
+        where_clause = f"COMPLETION_YEAR = {current_year}"
+        with arcpy.da.UpdateCursor(hwyproj_table, ["USE", "PROCESS_NOTES"], where_clause) as ucursor:
+            for row in ucursor:
+                row[0] = 0
+                row[1] = f"Completed in {current_year}"
+
+                ucursor.updateRow(row)
+
         self.base_year = current_year
 
     # function that builds future highways
@@ -1189,59 +1279,194 @@ class HighwayNetwork:
             build_years = self.years_list
 
         final_year = max(build_years)
-
-        # create a combined gdb to store + check final output 
-        mhn_all_name = "MHN_all.gdb"
-        mhn_all_gdb = os.path.join(mhn_out_folder, mhn_all_name)
-        arcpy.management.CreateFileGDB(mhn_out_folder, mhn_all_name)
-
-        # add the projects which will be applied 
-        arcpy.management.CreateFeatureclass(mhn_all_gdb, "hwyproj_applied", "POLYLINE", spatial_reference = 26771)
-        hwyproj_applied = os.path.join(mhn_all_gdb, "hwyproj_applied")
-
-        hwyproj = os.path.join(self.current_gdb, "hwyproj_coding")
-        hwyproj_fields = [[f.name, f.type] for f in arcpy.ListFields(hwyproj) if (f.name != "OBJECTID")]
-        hwyproj_fields_2 = [f.name for f in arcpy.ListFields(hwyproj) if (f.name != ("OBJECTID"))]
-
-        arcpy.management.AddFields(hwyproj_applied, hwyproj_fields)
-
-        where_clause = f"USE = 1 AND COMPLETION_YEAR <= {final_year}"
-        with arcpy.da.SearchCursor(hwyproj, hwyproj_fields_2, where_clause) as scursor:
-            with arcpy.da.InsertCursor(hwyproj_applied, hwyproj_fields_2) as icursor:
-
-                for row in scursor:
-                    icursor.insertRow(row)
-
-        geom_fields = ["SHAPE@", "ABB"]
-        hwylink = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
-        
-        with arcpy.da.UpdateCursor(hwyproj_applied, geom_fields) as ucursor:
-            for u_row in ucursor:
-
-                abb = u_row[1]
-
-                geom = None
-                where_clause = f"ABB = '{abb}'"
-
-                with arcpy.da.SearchCursor(hwylink, geom_fields, where_clause) as scursor:
-                    for s_row in scursor:
-
-                        geom = s_row[0]
-
-                ucursor.updateRow([geom, abb])
+        self.create_combined_gdb(final_year)
         
         # build the future highways 
         for build_year in build_years:
 
             print(f"Building highway network for {build_year}...")
             next_gdb = os.path.join(mhn_out_folder, f"MHN_{build_year}.gdb")
-            arcpy.management.Copy(self.current_gdb, next_gdb)
+            self.copy_gdb_safe(self.current_gdb, next_gdb)
             self.current_gdb = next_gdb
 
             for year in range(self.base_year, build_year):
                 self.hwy_forward_one_year()
 
+            self.built_gdbs.append(self.current_gdb)
+
         print("All years built.\n")
+
+    # function that cleans up the output gdbs 
+    def finalize_hwy_data(self):
+
+        print("Finalizing highway data...")
+
+        built_gdbs = self.built_gdbs
+
+        hwyproj_years_df = self.hwyproj_years_df
+
+        hwyproj_year_df = hwyproj_years_df[["TIPID", "COMPLETION_YEAR"]]
+        hwyproj_mcp_df = hwyproj_years_df[hwyproj_years_df.MCP_ID.notnull()][["TIPID", "MCP_ID"]]
+        hwyproj_rsp_df = hwyproj_years_df[hwyproj_years_df.RSP_ID.notnull()][["TIPID", "RSP_ID"]]
+        hwyproj_rcp_df = hwyproj_years_df[hwyproj_years_df.RCP_ID.notnull()][["TIPID", "RCP_ID"]]
+        hwyproj_notes_df = hwyproj_years_df[hwyproj_years_df.Notes.notnull()][["TIPID", "Notes"]]
+        
+        hwyproj_year_dict = hwyproj_year_df.set_index("TIPID").to_dict("index")
+        hwyproj_mcp_dict = hwyproj_mcp_df.set_index("TIPID").to_dict("index")
+        hwyproj_rsp_dict = hwyproj_rsp_df.set_index("TIPID").to_dict("index")
+        hwyproj_rcp_dict = hwyproj_rcp_df.set_index("TIPID").to_dict("index")
+        hwyproj_notes_dict = hwyproj_notes_df.set_index("TIPID").to_dict("index")
+    
+        for gdb in built_gdbs:
+            hwylink = os.path.join(gdb, "hwynet/hwynet_arc")
+            hwynode = os.path.join(gdb, "hwynet/hwynet_node")
+            hwyproj = os.path.join(gdb, "hwyproj_coding")
+            hwyproj_years = os.path.join(gdb, "hwynet/hwyproj")
+
+            # remove deleted links
+            # change abb to reflect new baselink
+            deleted_links = []
+            remaining_nodes = set()
+            abb_to_new_abb = {}
+            fields = ["BASELINK", "NEW_BASELINK", "ANODE", "BNODE", "ABB"]
+            with arcpy.da.UpdateCursor(hwylink, fields) as ucursor:
+                for row in ucursor:
+
+                    if row[0] == "1" and row[1] == "0":
+                        abb = row[4]
+                        deleted_links.append(abb)
+                        ucursor.deleteRow()
+                    
+                    else:
+                        row[0] = row[1] # baselink = new baselink 
+
+                        abb = row[4]
+                        new_abb = f"{row[2]}-{row[3]}-{row[0]}"
+
+                        abb_to_new_abb[abb] = new_abb
+                        remaining_nodes.add(row[2])
+                        remaining_nodes.add(row[3])
+
+                        row[4] = new_abb
+                        ucursor.updateRow(row)
+
+            arcpy.management.DeleteField(hwylink, ["NEW_BASELINK", "PROJECT", "DESCRIPTION"])
+
+            # in project table, drop use = 0 + projects on deleted links
+            # else, update its abb
+            fields = ["USE", "ABB"]
+            with arcpy.da.UpdateCursor(hwyproj, fields) as ucursor:
+                for row in ucursor:
+
+                    if row[0] == 0 or row[1] in deleted_links:
+                        ucursor.deleteRow()
+
+                    else:
+                        abb = row[1]
+                        row[1] = abb_to_new_abb[abb]
+                        ucursor.updateRow(row)
+
+
+            arcpy.management.DeleteField(hwyproj, ["REP_ABB", "COMPLETION_YEAR", 
+                                                   "USE", "PROCESS_NOTES"])
+            
+            # delete nodes which are not connected to links
+            with arcpy.da.UpdateCursor(hwynode, ["NODE"]) as ucursor:
+                for row in ucursor:
+
+                    if row[0] not in remaining_nodes:
+                        ucursor.deleteRow()
+
+            # make an fc of the remaining projects
+            arcpy.management.CreateFeatureclass(gdb, "hwyproj_remaining", "POLYLINE", spatial_reference = 26771)
+            hwyproj_remaining = os.path.join(gdb, "hwyproj_remaining")
+            arcpy.management.AddFields(hwyproj_remaining, [["TIPID", "TEXT"], ["ABB", "TEXT"]])
+
+            with arcpy.da.SearchCursor(hwyproj, ["TIPID", "ABB"]) as scursor:
+                with arcpy.da.InsertCursor(hwyproj_remaining, ["TIPID", "ABB"]) as icursor:
+
+                    for row in scursor:
+                        icursor.insertRow(row)
+
+            geom_fields = ["SHAPE@", "ABB"]
+            with arcpy.da.UpdateCursor(hwyproj_remaining, geom_fields) as ucursor:
+                for u_row in ucursor:
+
+                    abb = u_row[1]
+
+                    geom = None
+                    where_clause = f"ABB = '{abb}'"
+
+                    with arcpy.da.SearchCursor(hwylink, geom_fields, where_clause) as scursor:
+                        for s_row in scursor:
+
+                            geom = s_row[0]
+                            
+                    ucursor.updateRow([geom, abb])
+
+            hwyproj_dissolve = os.path.join(gdb, "hwyproj_dissolve")
+            arcpy.management.Dissolve(hwyproj_remaining, hwyproj_dissolve, ["TIPID"])
+
+            arcpy.management.AddFields(hwyproj_dissolve, [["TIPID_NEW", "TEXT", "TIPID", 10],
+                                                          ["COMPLETION_YEAR", "SHORT"],
+                                                          ["MCP_ID", "TEXT", "MCP_ID", 6],
+                                                          ["RSP_ID", "LONG"], ["RCP_ID", "LONG"],
+                                                          ["Notes", "Text"]])
+
+            fields = ["TIPID", "TIPID_NEW", "COMPLETION_YEAR",
+                      "MCP_ID", "RSP_ID", "RCP_ID", "Notes"]
+            
+            with arcpy.da.UpdateCursor(hwyproj_dissolve, fields) as ucursor:
+                for row in ucursor:
+
+                    tipid = row[0]
+                    row[1] = tipid
+
+                    row[2] = hwyproj_year_dict[tipid]["COMPLETION_YEAR"]
+
+                    if tipid in hwyproj_mcp_dict:
+                        row[3] = hwyproj_mcp_dict[tipid]["MCP_ID"]
+
+                    if tipid in hwyproj_rsp_dict:
+                        row[4] = hwyproj_rsp_dict[tipid]["RSP_ID"]
+
+                    if tipid in hwyproj_rcp_dict:
+                        row[5] = int(hwyproj_rcp_dict[tipid]["RCP_ID"])
+
+                    if tipid in hwyproj_notes_dict:
+                        row[6] = hwyproj_notes_dict[tipid]["Notes"]
+
+                    ucursor.updateRow(row)
+            
+            arcpy.management.DeleteField(hwyproj_dissolve, ["TIPID"])
+            arcpy.management.AlterField(hwyproj_dissolve, "TIPID_NEW", new_field_name = "TIPID")
+
+            with arcpy.da.UpdateCursor(hwyproj_years, ["TIPID"]) as ucursor:
+                for row in ucursor:
+                    ucursor.deleteRow()
+
+            arcpy.management.Append(hwyproj_dissolve, hwyproj_years, "TEST")
+            arcpy.management.Delete(hwyproj_remaining)
+            arcpy.management.Delete(hwyproj_dissolve)
+
+        print("Highway data finalized.\n")
+
+    # combine the future highways
+    def combine_links_and_nodes(self):
+        
+        print("Combining links and nodes...")
+        mhn_out_folder = self.mhn_out_folder
+        mhn_all_name = "MHN_all.gdb"
+        mhn_all_gdb = os.path.join(mhn_out_folder, mhn_all_name)
+
+        self.current_gdb = mhn_all_gdb
+
+        arcpy.management.CreateFeatureDataset(self.current_gdb, "hwylinks_all", spatial_reference = 26771)
+        arcpy.management.CreateFeatureDataset(self.current_gdb, "hwynodes_all", spatial_reference = 26771)
+
+        workspace = os.path.join(self.current_gdb, "hwylinks_all")
+        arcpy.management.CreateFeatureclass(workspace, "test")
+
 
 # main function for testing 
 if __name__ == "__main__":
@@ -1252,8 +1477,14 @@ if __name__ == "__main__":
     HN.check_hwy_fcs()
     HN.check_hwy_project_table()
     HN.build_future_hwys()
+    # HN.finalize_hwy_data()
+    HN.combine_links_and_nodes()
 
     end_time = time.time()
-    print(f"{round(end_time - start_time)}s to execute.")
+    total_time = round(end_time - start_time)
+    minutes = math.floor(total_time / 60)
+    seconds = total_time % 60
+
+    print(f"{minutes}m {seconds}s to execute.")
 
     print("Done")

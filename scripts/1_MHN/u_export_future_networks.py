@@ -7,6 +7,7 @@ from a_HN import HighwayNetwork
 
 import sys
 import argparse
+import time
 
 if __name__ == "__main__":
 
@@ -21,5 +22,8 @@ if __name__ == "__main__":
     HN = HighwayNetwork()
     print(f"The original base year is {HN.base_year}.")
     HN.generate_base_year()
+    HN.check_hwy_fcs()
+    HN.check_hwy_project_table()
+    HN.build_future_hwys()
 
     print("Done")
