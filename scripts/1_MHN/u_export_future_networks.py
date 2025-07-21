@@ -7,9 +7,12 @@ from a_HN import HighwayNetwork
 
 import sys
 import argparse
+import math
 import time
 
 if __name__ == "__main__":
+
+    start_time = time.time()
 
     parser = argparse.ArgumentParser()
     parser.add_argument("version", help = "please choose whether this is draft or final")
@@ -25,5 +28,14 @@ if __name__ == "__main__":
     HN.check_hwy_fcs()
     HN.check_hwy_project_table()
     HN.build_future_hwys()
+    if version == "final":
+        HN.finalize_hwy_data()
+
+    end_time = time.time()
+    total_time = round(end_time - start_time)
+    minutes = math.floor(total_time / 60)
+    seconds = total_time % 60
+
+    print(f"{minutes}m {seconds}s to execute.")
 
     print("Done")

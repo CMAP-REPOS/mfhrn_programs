@@ -756,6 +756,9 @@ class HighwayNetwork:
 
                 if row[0] not in hwyproj_multiple_dict:
                     ucursor.deleteRow()
+
+        # create a feature dataset to store the links 
+        arcpy.management.CreateFeatureDataset(mhn_all_gdb, "hwylinks_all", spatial_reference = 26771)
         
         print("Combined gdb created.\n")
 
@@ -1452,20 +1455,20 @@ class HighwayNetwork:
         print("Highway data finalized.\n")
 
     # combine the future highways
-    def combine_links_and_nodes(self):
+    # def combine_links_and_nodes(self):
         
-        print("Combining links and nodes...")
-        mhn_out_folder = self.mhn_out_folder
-        mhn_all_name = "MHN_all.gdb"
-        mhn_all_gdb = os.path.join(mhn_out_folder, mhn_all_name)
+    #     print("Combining links and nodes...")
+    #     mhn_out_folder = self.mhn_out_folder
+    #     mhn_all_name = "MHN_all.gdb"
+    #     mhn_all_gdb = os.path.join(mhn_out_folder, mhn_all_name)
 
-        self.current_gdb = mhn_all_gdb
+    #     self.current_gdb = mhn_all_gdb
 
-        arcpy.management.CreateFeatureDataset(self.current_gdb, "hwylinks_all", spatial_reference = 26771)
-        arcpy.management.CreateFeatureDataset(self.current_gdb, "hwynodes_all", spatial_reference = 26771)
+    #     arcpy.management.CreateFeatureDataset(self.current_gdb, "hwylinks_all", spatial_reference = 26771)
+    #     arcpy.management.CreateFeatureDataset(self.current_gdb, "hwynodes_all", spatial_reference = 26771)
 
-        workspace = os.path.join(self.current_gdb, "hwylinks_all")
-        arcpy.management.CreateFeatureclass(workspace, "test")
+    #     workspace = os.path.join(self.current_gdb, "hwylinks_all")
+    #     arcpy.management.CreateFeatureclass(workspace, "test")
 
 
 # main function for testing 
@@ -1478,7 +1481,6 @@ if __name__ == "__main__":
     HN.check_hwy_project_table()
     HN.build_future_hwys()
     # HN.finalize_hwy_data()
-    HN.combine_links_and_nodes()
 
     end_time = time.time()
     total_time = round(end_time - start_time)
