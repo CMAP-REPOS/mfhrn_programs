@@ -251,16 +251,19 @@ class HighwayNetwork:
         extra_nodes = all_node_set - link_node_set 
         
         if (len(extra_nodes) > 0):
+            bad_node_df = hwynode_df[hwynode_df.NODE.isin(extra_nodes)]
             error_file.write("These nodes are not connected to any links.\n")
-            error_file.write(str(extra_nodes) + "\n\n")
+            error_file.write(bad_node_df.to_string() + "\n\n")
             errors += 1
 
         # link anode / bnode must be in available nodes 
         invalid_nodes = link_node_set - all_node_set
+        hwylink_abb_df = hwylink_df[["ANODE", "BNODE", "ABB", "DIRECTIONS"]]
 
         if (len(invalid_nodes) > 0):
-            error_file.write("These nodes are not present in the node feature class.\n")
-            error_file.write(str(invalid_nodes) + "\n\n")
+            bad_link_df = hwylink_abb_df[(hwylink_abb_df.ANODE.isin(invalid_nodes)) | (hwylink_abb_df.BNODE.isin(invalid_nodes))]
+            error_file.write("These links have end nodes not present in the node feature class.\n")
+            error_file.write(bad_link_df.to_string() + "\n\n")
             errors += 1
 
         # duplicate anode-bnode combinations are not allowed
@@ -274,7 +277,6 @@ class HighwayNetwork:
             errors += 1
 
         # directional links must be valid
-        hwylink_abb_df = hwylink_df[["ANODE", "BNODE", "ABB", "DIRECTIONS"]]
         hwylink_dup_df = pd.merge(hwylink_abb_df, hwylink_abb_df.copy(), left_on = ["ANODE", "BNODE"], right_on = ["BNODE", "ANODE"])
         directions_set = set(hwylink_dup_df.DIRECTIONS_x.to_list()) | set(hwylink_dup_df.DIRECTIONS_y.to_list())
         
