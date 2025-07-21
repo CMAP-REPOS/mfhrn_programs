@@ -220,18 +220,29 @@ class HighwayNetwork:
     def check_hwy_fcs(self):
 
         print("Checking feature classes for errors...")
+        mhn_out_folder = self.mhn_out_folder
 
         self.get_hwy_dfs()
         hwynode_df = self.hwynode_df
         hwylink_df = self.hwylink_df 
         hwyproj_years_df = self.hwyproj_years_df
 
+        # keep track of the errors 
+        errors = 0
+
+        base_project_table_errors = os.path.join(
+            mhn_out_folder, 
+            "base_feature_class_errors.txt")
+        error_file= open(base_project_table_errors, "a") # open error file, don't forget to close it!
+
         # nodes must be unique 
         node_counts = hwynode_df.NODE.value_counts()
         
         if (node_counts.max() > 1):
-            print(node_counts[node_counts > 1])
-            sys.exit("These nodes violate unique node ID constraint. Crashing program.")
+            bad_node_df = node_counts[node_counts > 1]
+            error_file.write("These nodes violate unique node ID constraint.\n")
+            error_file.write(bad_node_df.to_string() + "\n\n")
+            errors += 1 
 
         all_node_set = set(hwynode_df.NODE.to_list())
         link_node_set = set(hwylink_df.ANODE.to_list()) | set(hwylink_df.BNODE.to_list())
@@ -240,23 +251,27 @@ class HighwayNetwork:
         extra_nodes = all_node_set - link_node_set 
         
         if (len(extra_nodes) > 0):
-            print(extra_nodes)
-            sys.exit("These nodes are not connected to any links. Crashing program.") 
+            error_file.write("These nodes are not connected to any links.\n")
+            error_file.write(str(extra_nodes) + "\n\n")
+            errors += 1
 
         # link anode / bnode must be in available nodes 
         invalid_nodes = link_node_set - all_node_set
 
         if (len(invalid_nodes) > 0):
-            print(invalid_nodes)
-            sys.exit("These nodes are not present in the node feature class. Crashing program.")
+            error_file.write("These nodes are not present in the node feature class.\n")
+            error_file.write(str(invalid_nodes) + "\n\n")
+            errors += 1
 
         # duplicate anode-bnode combinations are not allowed
         ab_count_df = hwylink_df.groupby(["ANODE", "BNODE"]).size().reset_index()
         ab_count_df = ab_count_df.rename(columns = {0: "group_size"})
         
         if (ab_count_df["group_size"].max() > 1):
-            print(ab_count_df[ab_count_df[["group_size"]] >= 2])
-            sys.exit("Violating unique ANODE-BNODE constraint. Crashing program.")
+            bad_link_df = ab_count_df[ab_count_df[["group_size"]] >= 2]
+            error_file.write("These links violate the unique ANODE-BNODE constraint.\n")
+            error_file.write(bad_link_df.to_string() + "\n\n")
+            errors += 1
 
         # directional links must be valid
         hwylink_abb_df = hwylink_df[["ANODE", "BNODE", "ABB", "DIRECTIONS"]]
@@ -264,16 +279,25 @@ class HighwayNetwork:
         directions_set = set(hwylink_dup_df.DIRECTIONS_x.to_list()) | set(hwylink_dup_df.DIRECTIONS_y.to_list())
         
         if directions_set != {'1'}:
-            print(hwylink_dup_df[(hwylink_dup_df.DIRECTIONS_x != '1') | (hwylink_dup_df.DIRECTIONS_y != '1')])
-            sys.exit("Violating directional link combinations. Crashing program.")
+            bad_link_df = hwylink_dup_df[(hwylink_dup_df.DIRECTIONS_x != '1') | (hwylink_dup_df.DIRECTIONS_y != '1')]
+            error_file.write("These links violate the unique directions constraint.\n")
+            error_file.write(bad_link_df.to_string() + "\n\n")
+            errors += 1
 
         # TIPIDs should be unique 
         tipid_count_df = hwyproj_years_df.groupby(["TIPID"]).size().reset_index()
         tipid_count_df = tipid_count_df.rename(columns = {0:"group_size"})
 
         if (tipid_count_df["group_size"].max() > 1):
-            print(tipid_count_df[tipid_count_df["group_size"] >= 2])
-            sys.exit("Violating unique TIPID constraint. Crashing program.")
+            bad_project_df = tipid_count_df[tipid_count_df["group_size"] >= 2]
+            error_file.write("These projects violate the unique TIPID constraint.\n")
+            error_file.write(bad_project_df.to_string() + "\n\n")
+            errors +=1
+
+        error_file.close()
+
+        if errors > 0:
+            sys.exit("Error(s) were detected in the feature class. Crashing program.")
 
         print("Base feature classes checked for errors.\n")
         
