@@ -160,6 +160,7 @@ class HighwayNetwork:
         out_folder = os.path.dirname(mhn_out_folder)
         in_gdb = self.in_gdb
         base_year = self.base_year 
+        hwylink_df = self.hwylink_df
 
         if os.path.isdir(out_folder) == True:
             shutil.rmtree(out_folder)
@@ -173,21 +174,29 @@ class HighwayNetwork:
         self.current_gdb = out_gdb # update the HN's current gdb 
 
         self.built_gdbs.append(self.current_gdb)
-
         self.del_rcs()
         hwyproj_coding_table = os.path.join(self.current_gdb, "hwyproj_coding")
         hwyproj_year_fc = os.path.join(self.current_gdb, "hwynet/hwyproj")
 
         # to make my life easier - add a field with REP-ABB to the project df
-        arcpy.management.AddField(hwyproj_coding_table, "REP_ABB", "TEXT") # to make my life easier 
-        arcpy.management.CalculateField(
-            in_table= hwyproj_coding_table,
-            field="REP_ABB", expression="rep_abb(!REP_ANODE!, !REP_BNODE!)",
-            expression_type="PYTHON3",
-            code_block="""def rep_abb(rep_anode, rep_bnode):
-            return str(rep_anode) + "-" + str(rep_bnode) + "-1" """,
-            field_type="TEXT",
-            enforce_domains="NO_ENFORCE_DOMAINS")
+        arcpy.management.AddField(hwyproj_coding_table, "REP_ABB", "TEXT", field_length = 13) # to make my life easier 
+
+        abb_dict = hwylink_df[["ANODE", "BNODE", "ABB"]].set_index(["ANODE", "BNODE"]).to_dict("index")
+        fields = ["REP_ANODE", "REP_BNODE", "REP_ABB"]
+
+        with arcpy.da.UpdateCursor(hwyproj_coding_table, fields) as ucursor:
+            for row in ucursor:
+
+                anode = row[0]
+                bnode = row[1]
+                if (anode, bnode) in abb_dict:
+                    rep_abb = abb_dict[(anode, bnode)]["ABB"]
+                    row[2] = rep_abb
+
+                else:
+                    row[2] = "0"
+                
+                ucursor.updateRow(row)
         
         arcpy.management.JoinField(hwyproj_coding_table, "TIPID", hwyproj_year_fc, "TIPID", "COMPLETION_YEAR")
         arcpy.management.AddFields(hwyproj_coding_table, [["USE", "SHORT"], ["PROCESS_NOTES", "TEXT"]])
@@ -290,9 +299,6 @@ class HighwayNetwork:
         hwylink_dup_df = pd.merge(hwylink_abb_df, hwylink_abb_df.copy(), left_on = ["ANODE", "BNODE"], right_on = ["BNODE", "ANODE"])
         hwylink_dup_set = set(hwylink_dup_df.ABB_x.to_list() + hwylink_dup_df.ABB_y.to_list())
 
-        # projects with year 9999 are not well maintained 
-        # only check integrity if != 9999
-
         hwyproj_df = self.hwyproj_df
         hwyproj_coding_table = os.path.join(self.current_gdb, "hwyproj_coding")
 
@@ -309,7 +315,7 @@ class HighwayNetwork:
         # don't use the duplicates
         fields = ["TIPID", "ABB", "USE", "PROCESS_NOTES"]
         dup_fail = 0
-        with arcpy.da.UpdateCursor(hwyproj_coding_table, fields, "COMPLETION_YEAR <> 9999") as ucursor:
+        with arcpy.da.UpdateCursor(hwyproj_coding_table, fields) as ucursor:
             for row in ucursor:
                 if (row[0], row[1]) in dup_set:
                     row[2] = 0
@@ -499,7 +505,7 @@ class HighwayNetwork:
                     continue
 
                 # check that REP_ANODE + REP_BNODE are only associated with Action Code 2 
-                if action_code in [1, 3, 4] and rep_abb != "0-0-1":
+                if action_code in [1, 3, 4] and rep_abb != "0":
                     row_fail+=1
                     row[26] = 0
                     row[27] = "Error: REP_ANODE + REP_BNODE are invalid if action code != 2."
@@ -519,19 +525,19 @@ class HighwayNetwork:
                     ucursor.updateRow(row)
                     continue
 
+                # if action code 2, REP_ABB must exist 
+                if action_code == 2 and rep_abb == "0":
+                    row_fail+=1
+                    row[26] = 0 
+                    row[27] = "Error: Action code 2 must be associated with a valid REP_ABB."
+                    ucursor.updateRow(row)
+                    continue
+
                 # if action code 2, REP_ABB must be a regular link
                 if action_code == 2 and rep_abb[-1] != "1":
                     row_fail+=1
                     row[26] = 0 
                     row[27] = "Error: Action code 2 must replace a regular link."
-                    ucursor.updateRow(row)
-                    continue
-
-                # if action code 2, REP_ABB must exist 
-                if action_code == 2 and rep_abb not in abbs:
-                    row_fail+=1
-                    row[26] = 0 
-                    row[27] = "Error: Action code 2 must be associated with a valid REP_ABB."
                     ucursor.updateRow(row)
                     continue
 
@@ -674,7 +680,7 @@ class HighwayNetwork:
 
         # check for links which are replaced but not deleted
         hwyproj_3_set = set(hwyproj_df[hwyproj_df.ACTION_CODE == "3"].ABB.to_list())
-        hwyproj_rep_set = set(hwyproj_df[hwyproj_df.REP_ABB != "0-0-1"].REP_ABB.to_list())
+        hwyproj_rep_set = set(hwyproj_df[hwyproj_df.REP_ABB != "0"].REP_ABB.to_list())
 
         no_delete_set = hwyproj_rep_set - hwyproj_3_set
 
@@ -695,6 +701,29 @@ class HighwayNetwork:
         error_file.close()
 
         print("Base highway project table checked for errors.\n")
+
+    # function that copies base links into the combined gdb 
+    def copy_hwy_links(self):
+
+        mhn_out_folder = self.mhn_out_folder
+        mhn_all_name = "MHN_all.gdb"
+        mhn_all_gdb = os.path.join(mhn_out_folder, mhn_all_name)
+
+        hwylink = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
+        link_workspace = os.path.join(mhn_all_gdb, "hwylinks_all")
+
+        base_links_name = f"HWYLINK_{self.base_year}"
+        arcpy.management.CreateFeatureclass(link_workspace, base_links_name, template = hwylink, spatial_reference = 26771)
+        base_links = os.path.join(link_workspace, base_links_name)
+
+        hwylink_fields = [f.name for f in arcpy.ListFields(hwylink) if f.name != "OBJECTID" and f.type != "Geometry"]
+        hwylink_fields += ["SHAPE@"]
+
+        with arcpy.da.SearchCursor(hwylink, hwylink_fields) as scursor:
+            with arcpy.da.InsertCursor(base_links, hwylink_fields) as icursor:
+
+                for row in scursor:
+                    icursor.insertRow(row)
 
     # function that creates a gdb of all built years 
     def create_combined_gdb(self, final_year):
@@ -757,8 +786,23 @@ class HighwayNetwork:
                 if row[0] not in hwyproj_multiple_dict:
                     ucursor.deleteRow()
 
+        # copy the nodes 
+        hwynode = os.path.join(self.current_gdb, "hwynet/hwynet_node")
+        arcpy.management.CreateFeatureclass(mhn_all_gdb, "hwynode_all", template = hwynode, spatial_reference = 26771)
+        hwynode_all = os.path.join(mhn_all_gdb, "hwynode_all")
+        hwynode_fields = [f.name for f in arcpy.ListFields(hwynode) if f.name != "OBJECTID" and f.type != "Geometry"]
+        hwynode_fields += ["SHAPE@XY"]
+
+        with arcpy.da.SearchCursor(hwynode, hwynode_fields) as scursor:
+            with arcpy.da.InsertCursor(hwynode_all, hwynode_fields) as icursor:
+
+                for row in scursor:
+                    icursor.insertRow(row)
+
         # create a feature dataset to store the links 
+        # then copy over the base links
         arcpy.management.CreateFeatureDataset(mhn_all_gdb, "hwylinks_all", spatial_reference = 26771)
+        self.copy_hwy_links()
         
         print("Combined gdb created.\n")
 
@@ -912,17 +956,13 @@ class HighwayNetwork:
                     inverted_2_dict[(project, rep_abb)] = [abb]
                 else:
                     inverted_2_dict[(project, rep_abb)].append(abb)
-            
-            def to_sql_string(abb): 
-                quote_abb = f"'{abb}'"
-                return quote_abb
                 
             for action in inverted_2_dict:
 
                 project = action[0]
                 rep_abb = action[1]
                 abb_list = inverted_2_dict[action]
-                abb_list_string = list(map(to_sql_string, abb_list))
+                abb_list_string = [f"'{abb}'" for abb in abb_list]
                 abb_string = ", ".join(abb_list_string)
 
                 directions = "0"
@@ -1295,6 +1335,10 @@ class HighwayNetwork:
             for year in range(self.base_year, build_year):
                 self.hwy_forward_one_year()
 
+            # copy built links into combined gdb 
+            self.copy_hwy_links()
+
+            # add the built gdb into the list of built gdbs
             self.built_gdbs.append(self.current_gdb)
 
         print("All years built.\n")
@@ -1453,23 +1497,6 @@ class HighwayNetwork:
             arcpy.management.Delete(hwyproj_dissolve)
 
         print("Highway data finalized.\n")
-
-    # combine the future highways
-    # def combine_links_and_nodes(self):
-        
-    #     print("Combining links and nodes...")
-    #     mhn_out_folder = self.mhn_out_folder
-    #     mhn_all_name = "MHN_all.gdb"
-    #     mhn_all_gdb = os.path.join(mhn_out_folder, mhn_all_name)
-
-    #     self.current_gdb = mhn_all_gdb
-
-    #     arcpy.management.CreateFeatureDataset(self.current_gdb, "hwylinks_all", spatial_reference = 26771)
-    #     arcpy.management.CreateFeatureDataset(self.current_gdb, "hwynodes_all", spatial_reference = 26771)
-
-    #     workspace = os.path.join(self.current_gdb, "hwylinks_all")
-    #     arcpy.management.CreateFeatureclass(workspace, "test")
-
 
 # main function for testing 
 if __name__ == "__main__":
