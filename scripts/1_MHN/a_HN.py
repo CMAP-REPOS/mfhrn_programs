@@ -1431,7 +1431,8 @@ class HighwayNetwork:
             with arcpy.da.UpdateCursor(hwyproj, fields) as ucursor:
                 for row in ucursor:
 
-                    if row[0] == 0 or row[1] in deleted_links:
+                    # if row[0] == 0 or row[1] in deleted_links:
+                    if row[0] == 0:
                         ucursor.deleteRow()
 
                     else:
@@ -1533,7 +1534,7 @@ if __name__ == "__main__":
     HN.check_hwy_fcs()
     HN.check_hwy_project_table()
     HN.build_future_hwys()
-    # HN.finalize_hwy_data()
+    HN.finalize_hwy_data()
 
     end_time = time.time()
     total_time = round(end_time - start_time)
