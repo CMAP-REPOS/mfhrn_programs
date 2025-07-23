@@ -129,13 +129,6 @@ class HighwayNetwork:
             if arcpy.Exists(rc_path):
                 arcpy.management.Delete(rc_path)
 
-    # helper function to delete bus files
-    def del_bus(self):
-
-        for bus_file in self.bus_files:
-            bus_path = os.path.join(self.current_gdb, bus_file)
-            arcpy.management.Delete(bus_path)
-    
     # helper function that copies a gdb
     def copy_gdb_safe(self, input_gdb, output_gdb):
         while True:
