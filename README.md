@@ -1,7 +1,7 @@
 # mfhrn_programs
-Programs for processing the Master Freight Network (MFN) for freight/travel modeling. 
+Programs for processing the Master Highway Network (MHN) for freight/travel modeling. 
 
-At a conceptual level, the way MHN fits together with the MFN and MRN for processing is described by the (greatly simplified) diagram:
+At a conceptual level, the way MHN fits together with the Master Freight Network (MFN) and Master Rail Network (MRN) for processing is described by the (greatly simplified) diagram:
 
 ![A diagram showing the highway sub-process in the repository.](images/highway_process.png)
 
