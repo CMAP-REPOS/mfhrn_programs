@@ -7,7 +7,7 @@ At a conceptual level, the way MHN fits together with the MFN and MRN for proces
 
 The boxes represent input while the circles represent output. As you can see from the diagram, the highway and bus output from the MHN are a crucial first step in freight/travel modeling. 
 
-To get started with this repository, check out the wiki. 
+To get started with this repository, check out the [wiki](https://github.com/CMAP-REPOS/mfhrn_programs/wiki).
 
 ## Objectives 
 This repository contains scripts and tools where the MFN (and any other necessary files) can be processed for input into either the freight model or travel model for analysis. 
