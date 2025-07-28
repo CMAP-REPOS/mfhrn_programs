@@ -86,7 +86,7 @@ class HighwayNetwork:
 
         years_list = []
         for year in years_list_raw:
-            if year > self.base_year: 
+            if year >= self.base_year: 
                 years_list.append(year)
         years_list.sort()
 
@@ -1333,12 +1333,15 @@ class HighwayNetwork:
         self.base_year = current_year
 
     # function that builds future highways
-    def build_future_hwys(self, subset, build_years = None):
+    def build_future_hwys(self, subset = False, build_years = None):
 
         mhn_out_folder = self.mhn_out_folder
 
         if build_years == None: 
-            build_years = self.years_list
+            build_years = self.years_list.copy()
+
+        if self.base_year in build_years:
+            build_years.remove(self.base_year)
 
         final_year = max(build_years)
         self.create_combined_gdb(final_year)
@@ -1418,6 +1421,13 @@ class HighwayNetwork:
 
             arcpy.management.DeleteField(hwylink, ["NEW_BASELINK", "PROJECT", "DESCRIPTION"])
 
+            # delete nodes which are not connected to links
+            with arcpy.da.UpdateCursor(hwynode, ["NODE"]) as ucursor:
+                for row in ucursor:
+
+                    if row[0] not in remaining_nodes:
+                        ucursor.deleteRow()
+
             # in project table, drop use = 0 + projects on deleted links
             # else, update its abb
             fields = ["USE", "ABB"]
@@ -1436,13 +1446,6 @@ class HighwayNetwork:
 
             arcpy.management.DeleteField(hwyproj, ["REP_ABB", "COMPLETION_YEAR", 
                                                    "USE", "PROCESS_NOTES"])
-            
-            # delete nodes which are not connected to links
-            with arcpy.da.UpdateCursor(hwynode, ["NODE"]) as ucursor:
-                for row in ucursor:
-
-                    if row[0] not in remaining_nodes:
-                        ucursor.deleteRow()
 
             # make an fc of the remaining projects
             arcpy.management.CreateFeatureclass(gdb, "hwyproj_remaining", "POLYLINE", spatial_reference = 26771)
@@ -1527,7 +1530,6 @@ if __name__ == "__main__":
     HN.check_hwy_fcs()
     HN.check_hwy_project_table()
     HN.build_future_hwys()
-    HN.finalize_hwy_data()
 
     end_time = time.time()
     total_time = round(end_time - start_time)
