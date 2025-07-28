@@ -32,8 +32,8 @@ if __name__ == "__main__":
     # import highway project coding
     HN = HighwayNetwork()
     HN.generate_base_year()
-    HN.import_hwy_project_coding()
     HN.check_hwy_fcs()
+    HN.import_hwy_project_coding()
     HN.check_hwy_project_table()
     if args.final:
         HN.finalize_hwy_data()

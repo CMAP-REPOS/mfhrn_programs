@@ -153,7 +153,6 @@ class HighwayNetwork:
         out_folder = os.path.dirname(mhn_out_folder)
         in_gdb = self.in_gdb
         base_year = self.base_year 
-        hwylink_df = self.hwylink_df
 
         if os.path.isdir(out_folder) == True:
             shutil.rmtree(out_folder)
@@ -168,32 +167,14 @@ class HighwayNetwork:
 
         self.built_gdbs.append(self.current_gdb)
         self.del_rcs()
-        hwyproj_coding_table = os.path.join(self.current_gdb, "hwyproj_coding")
+        hwyproj_coding_table = os.path.join(self.current_gdb, "hwyproj_coding")    
+
         hwyproj_year_fc = os.path.join(self.current_gdb, "hwynet/hwyproj")
 
         # to make my life easier - add a field with REP-ABB to the project df
         arcpy.management.AddField(hwyproj_coding_table, "REP_ABB", "TEXT", field_length = 13) # to make my life easier 
-
-        abb_dict = hwylink_df[["ANODE", "BNODE", "ABB"]].set_index(["ANODE", "BNODE"]).to_dict("index")
-        fields = ["REP_ANODE", "REP_BNODE", "REP_ABB"]
-
-        with arcpy.da.UpdateCursor(hwyproj_coding_table, fields) as ucursor:
-            for row in ucursor:
-
-                anode = row[0]
-                bnode = row[1]
-                if (anode, bnode) in abb_dict:
-                    rep_abb = abb_dict[(anode, bnode)]["ABB"]
-                    row[2] = rep_abb
-
-                else:
-                    row[2] = "0"
-                
-                ucursor.updateRow(row)
-        
         arcpy.management.JoinField(hwyproj_coding_table, "TIPID", hwyproj_year_fc, "TIPID", "COMPLETION_YEAR")
         arcpy.management.AddFields(hwyproj_coding_table, [["USE", "SHORT"], ["PROCESS_NOTES", "TEXT"]])
-        arcpy.management.CalculateField(hwyproj_coding_table, "USE", "1")
 
         # add fields to review updates (a la Volpe)
         hwylink_fc = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
@@ -208,10 +189,6 @@ class HighwayNetwork:
             enforce_domains="NO_ENFORCE_DOMAINS")
 
         print("Base year copied and prepared for modification.\n")
-
-    # function that imports highway project coding
-    def import_hwy_project_coding(self): 
-        pass
 
     # function that checks base links + nodes
     def check_hwy_fcs(self):
@@ -297,15 +274,100 @@ class HighwayNetwork:
 
         if errors > 0:
             sys.exit("Error(s) were detected in the feature class. Crashing program.")
+        else:
+            os.remove(base_project_table_errors)
 
         print("Base feature classes checked for errors.\n")
+     
+    # function that imports highway project coding
+    def import_hwy_project_coding(self): 
+
+        print("Importing highway project coding...")
+
+        mhn_in_folder = self.mhn_in_folder
+        mhn_out_folder = self.mhn_out_folder
+        hwylink_df = self.hwylink_df 
+
+        import_path = os.path.join(mhn_in_folder, "import_hwy_project_coding.xlsx")
+        import_df = pd.read_excel(import_path)
+
+        # check where tipid, anode, bnode, action is null
+        null_df = import_df[pd.isnull(import_df.tipid) | 
+                            pd.isnull(import_df.anode) |
+                            pd.isnull(import_df.bnode) |
+                            pd.isnull(import_df.action)]
         
+        import_errors_csv = os.path.join(mhn_out_folder, "import_project_coding_errors.csv")
+
+        if len(null_df) > 0:
+            null_df.to_csv(import_errors_csv, index = False)
+            sys.exit("Row(s) detected where TIPID, ANODE, BNODE, or ACTION is null. Crashing program.")
+
+        # check where anode + bnode don't correspond to a valid link
+        abb_dict = hwylink_df[["ANODE", "BNODE", "ABB"]].set_index(["ANODE", "BNODE"]).to_dict("index")
+        import_records = import_df.to_dict("records")
+        bad_records = []
+
+        for row in import_records:
+
+            if (row["anode"], row["bnode"]) not in abb_dict:
+                bad_records.append(row)
+
+        if len(bad_records) > 0:
+            bad_records_df = pd.DataFrame(bad_records)
+            bad_records_df.to_csv(import_errors_csv, index = False)
+            sys.exit("Row(s) detected where ANODE and BNODE don't correspond to a valid link. Crashing program.")
+
+        # check where tipid-abb is not unique
+        import_df["abb"] = import_df.apply(lambda x: abb_dict[(x["anode"], x["bnode"])]["ABB"], axis = 1)
+        import_records = import_df.to_dict("records")
+
+        tipid_abb_series = import_df.groupby(["tipid", "abb"]).size()
+        duplicate_combos = tipid_abb_series[tipid_abb_series > 1].to_dict()
+
+        duplicate_records = []
+
+        for row in import_records:
+
+            if (row["tipid"], row["abb"]) in duplicate_combos:
+                duplicate_records.append(row)
+
+        if len(duplicate_records) > 0:
+            duplicate_records_df = pd.DataFrame(duplicate_records)
+            duplicate_records_df.to_csv(import_errors_csv, index = False)
+            sys.exit("Rows detected where TIPID - ABB is not unique. Crashing program.")
+
+        print("Highway project coding imported.\n")
+
     # function that checks the project table
     def check_hwy_project_table(self):
 
         print("Checking base project table for errors...")
         
+        hwylink_df = self.hwylink_df
         mhn_out_folder = self.mhn_out_folder
+        hwyproj_coding_table = os.path.join(self.current_gdb, "hwyproj_coding")    
+
+        # prepare added columns
+        abb_dict = hwylink_df[["ANODE", "BNODE", "ABB"]].set_index(["ANODE", "BNODE"]).to_dict("index")
+        fields = ["REP_ANODE", "REP_BNODE", "REP_ABB"]
+
+        with arcpy.da.UpdateCursor(hwyproj_coding_table, fields) as ucursor:
+            for row in ucursor:
+
+                anode = row[0]
+                bnode = row[1]
+                if (anode, bnode) in abb_dict:
+                    rep_abb = abb_dict[(anode, bnode)]["ABB"]
+                    row[2] = rep_abb
+
+                else:
+                    row[2] = "0"
+                
+                ucursor.updateRow(row)
+
+        arcpy.management.CalculateField(hwyproj_coding_table, "USE", "1")
+
         self.get_hwy_dfs() # update the HN's current dfs 
 
         base_project_table_errors = os.path.join(
@@ -1532,8 +1594,7 @@ if __name__ == "__main__":
     HN = HighwayNetwork()
     HN.generate_base_year()
     HN.check_hwy_fcs()
-    HN.check_hwy_project_table()
-    HN.build_future_hwys()
+    HN.import_hwy_project_coding()
 
     end_time = time.time()
     total_time = round(end_time - start_time)
