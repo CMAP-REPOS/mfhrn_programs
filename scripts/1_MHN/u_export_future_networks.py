@@ -5,6 +5,7 @@
 
 from a_HN import HighwayNetwork
 
+import os
 import sys
 import argparse
 import math
@@ -15,21 +16,27 @@ if __name__ == "__main__":
     start_time = time.time()
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("version", help = "please choose whether this is draft or final")
+    parser.add_argument("-s", "--subset", help="subset to certain projects",
+                        action="store_true")
     args = parser.parse_args()
-    version = args.version
 
-    if version != "draft" and version != "final":
-        sys.exit("error: you must choose whether the version is 'draft' or 'final'")
+    # check if subset = True
+    if args.subset:
+        sys_path = sys.argv[0]
+        abs_path = os.path.abspath(sys_path)
+        mfhrn_path = os.path.dirname(os.path.dirname(os.path.dirname(abs_path)))
+        subset_path = os.path.join(mfhrn_path, "input", "1_MHN", "hwy_project_subset.csv")
 
+        if not os.path.exists(subset_path):
+            sys.exit("Please provide a csv of the projects to subset to as hwy_project_subset.csv.")
+
+    # build highway networks
     HN = HighwayNetwork()
     print(f"The original base year is {HN.base_year}.")
     HN.generate_base_year()
     HN.check_hwy_fcs()
     HN.check_hwy_project_table()
-    HN.build_future_hwys()
-    if version == "final":
-        HN.finalize_hwy_data()
+    HN.build_future_hwys(subset = args.subset)
 
     end_time = time.time()
     total_time = round(end_time - start_time)

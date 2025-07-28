@@ -1333,7 +1333,7 @@ class HighwayNetwork:
         self.base_year = current_year
 
     # function that builds future highways
-    def build_future_hwys(self, subset = None, build_years = None):
+    def build_future_hwys(self, subset, build_years = None):
 
         mhn_out_folder = self.mhn_out_folder
 
