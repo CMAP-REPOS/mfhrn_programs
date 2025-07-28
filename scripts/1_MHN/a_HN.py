@@ -291,6 +291,8 @@ class HighwayNetwork:
         import_path = os.path.join(mhn_in_folder, "import_hwy_project_coding.xlsx")
         import_df = pd.read_excel(import_path)
 
+        import_df["tipid"] = import_df["tipid"].astype("string")
+
         # check where tipid, anode, bnode, action is null
         null_df = import_df[pd.isnull(import_df.tipid) | 
                             pd.isnull(import_df.anode) |
@@ -302,6 +304,8 @@ class HighwayNetwork:
         if len(null_df) > 0:
             null_df.to_csv(import_errors_csv, index = False)
             sys.exit("Row(s) detected where TIPID, ANODE, BNODE, or ACTION is null. Crashing program.")
+
+        import_df = import_df.fillna(0)
 
         # check where anode + bnode don't correspond to a valid link
         abb_dict = hwylink_df[["ANODE", "BNODE", "ABB"]].set_index(["ANODE", "BNODE"]).to_dict("index")
@@ -336,6 +340,111 @@ class HighwayNetwork:
             duplicate_records_df = pd.DataFrame(duplicate_records)
             duplicate_records_df.to_csv(import_errors_csv, index = False)
             sys.exit("Rows detected where TIPID - ABB is not unique. Crashing program.")
+
+        # now add to the table 
+        hwyproj_coding_table = os.path.join(self.current_gdb, "hwyproj_coding")    
+        fields = ["TIPID", "ABB"]
+        existing_list = []
+
+        with arcpy.da.SearchCursor(hwyproj_coding_table, fields) as scursor:
+
+            for row in scursor:
+                existing_list.append((row[0], row[1]))
+
+        update_rows = []
+        insert_rows = []
+
+        for record in import_records:
+
+            if (record["tipid"], record["abb"]) in existing_list:
+                update_rows.append(record)
+            else:
+                insert_rows.append(record)
+
+        fields = [f.name for f in arcpy.ListFields(hwyproj_coding_table) if f.name != "OBJECTID"]
+        # for index, field in enumerate(fields):
+        #     print(index, field)
+
+        # if it's already in the project table- just update 
+        for update_row in update_rows:
+
+            tipid = update_row["tipid"]
+            abb = update_row["abb"]
+
+            where_clause = f"TIPID = '{tipid}' AND ABB = '{abb}'"
+            with arcpy.da.UpdateCursor(hwyproj_coding_table, fields, where_clause) as ucursor:
+                for row in ucursor:
+                    
+                    row[1] = update_row["action"]
+                    row[2] = update_row["directions"]
+                    row[3] = update_row["type1"]
+                    row[4] = update_row["type2"]
+                    row[5] = update_row["ampm1"]
+                    row[6] = update_row["ampm2"]
+                    row[7] = update_row["speed1"]
+                    row[8] = update_row["speed2"]
+                    row[9] = update_row["lanes1"]
+                    row[10] = update_row["lanes2"]
+                    row[11] = update_row["feet1"]
+                    row[12] = update_row["feet2"]
+                    row[13] = update_row["parklanes1"]
+                    row[14] = update_row["parklanes2"]
+                    row[15] = update_row["sigic"]
+                    row[16] = update_row["cltl"]
+                    row[17] = update_row["rr_grade_sep"]
+                    row[18] = update_row["tolldollars"]
+                    row[19] = update_row["modes"]
+                    row[20] = update_row["tod"]
+                    row[22] = update_row["rep_anode"]
+                    row[23] = update_row["rep_bnode"]
+                    row[27] = "Updated from import successfully."
+
+                    ucursor.updateRow(row)
+
+        # else- insert, however, must compute year 
+        hwyproj_years_df = self.hwyproj_years_df
+        hwyproj_years_dict = hwyproj_years_df.set_index("TIPID")["COMPLETION_YEAR"].to_dict()
+
+        with arcpy.da.InsertCursor(hwyproj_coding_table, fields) as icursor:
+
+            for insert_row in insert_rows:
+
+                completion_year = None
+                if insert_row["tipid"] in hwyproj_years_dict:
+                    completion_year = hwyproj_years_dict[insert_row["tipid"]]
+
+                row = [
+                    insert_row["tipid"], 
+                    insert_row["action"], 
+                    insert_row["directions"],
+                    insert_row["type1"],
+                    insert_row["type2"],
+                    insert_row["ampm1"],
+                    insert_row["ampm2"],
+                    insert_row["speed1"],
+                    insert_row["speed2"],
+                    insert_row["lanes1"],
+                    insert_row["lanes2"],
+                    insert_row["feet1"],
+                    insert_row["feet2"],
+                    insert_row["parklanes1"],
+                    insert_row["parklanes2"],
+                    insert_row["sigic"],
+                    insert_row["cltl"],
+                    insert_row["rr_grade_sep"],
+                    insert_row["tolldollars"],
+                    insert_row["modes"],
+                    insert_row["tod"],
+                    insert_row["abb"],
+                    insert_row["rep_anode"],
+                    insert_row["rep_bnode"],
+                    None,
+                    completion_year,
+                    None,
+                    "Inserted from import successfully."
+                ]
+
+                icursor.insertRow(row)
 
         print("Highway project coding imported.\n")
 
