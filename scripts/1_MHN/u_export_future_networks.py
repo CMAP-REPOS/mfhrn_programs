@@ -25,10 +25,10 @@ if __name__ == "__main__":
         sys_path = sys.argv[0]
         abs_path = os.path.abspath(sys_path)
         mfhrn_path = os.path.dirname(os.path.dirname(os.path.dirname(abs_path)))
-        subset_path = os.path.join(mfhrn_path, "input", "1_MHN", "hwy_project_subset.csv")
+        subset_path = os.path.join(mfhrn_path, "input", "1_MHN", "subset_hwy_projects.csv")
 
         if not os.path.exists(subset_path):
-            sys.exit("Please provide a csv of the projects to subset to as hwy_project_subset.csv.")
+            sys.exit("Please provide a csv of the projects to subset to as subset_hwy_projects.csv.")
 
     # build highway networks
     HN = HighwayNetwork()
