@@ -1,6 +1,8 @@
 _misc/
 
-input/
+input/input_years.csv
+input/1_MHN/MHN.gdb
+input/1_MHN/hwy_project_subset.csv
 
 output/
 *__pycache__*
