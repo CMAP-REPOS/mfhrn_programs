@@ -32,7 +32,6 @@ if __name__ == "__main__":
 
     # build highway networks
     HN = HighwayNetwork()
-    print(f"The original base year is {HN.base_year}.")
     HN.generate_base_year()
     HN.check_hwy_fcs()
     HN.check_hwy_project_table()

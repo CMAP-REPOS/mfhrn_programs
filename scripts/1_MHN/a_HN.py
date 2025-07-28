@@ -209,6 +209,10 @@ class HighwayNetwork:
 
         print("Base year copied and prepared for modification.\n")
 
+    # function that imports highway project coding
+    def import_hwy_project_coding(self): 
+        pass
+
     # function that checks base links + nodes
     def check_hwy_fcs(self):
 
@@ -745,10 +749,11 @@ class HighwayNetwork:
                     icursor.insertRow(row)
 
     # function that creates a gdb of all built years 
-    def create_combined_gdb(self, final_year):
+    def create_combined_gdb(self):
 
         print("Creating combined gdb...")
 
+        final_year = max(self.years_list)
         mhn_out_folder = self.mhn_out_folder
 
         # create a combined gdb to store + check final output 
@@ -1342,9 +1347,8 @@ class HighwayNetwork:
 
         if self.base_year in build_years:
             build_years.remove(self.base_year)
-
-        final_year = max(build_years)
-        self.create_combined_gdb(final_year)
+        
+        self.create_combined_gdb()
         
         # build the future highways 
         for build_year in build_years:
