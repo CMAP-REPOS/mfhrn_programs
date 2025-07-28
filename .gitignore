@@ -2,7 +2,7 @@ _misc/
 
 input/input_years.csv
 input/1_MHN/MHN.gdb
-input/1_MHN/hwy_project_subset.csv
+input/1_MHN/subset_hwy_projects.csv
 
 output/
 *__pycache__*
