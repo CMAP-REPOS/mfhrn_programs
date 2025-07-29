@@ -1,4 +1,4 @@
-## a1_HN.py 
+## a_HN.py 
 ## combination of:
 ## 1) MHN.py, 
 ## 2) process_highway_coding.sas,
@@ -290,6 +290,11 @@ class HighwayNetwork:
 
         import_path = os.path.join(mhn_in_folder, "import_hwy_project_coding.xlsx")
         import_df = pd.read_excel(import_path)
+
+        import_df = import_df.dropna(how = "all")
+
+        if len(import_df) == 0:
+            return
 
         import_df["tipid"] = import_df["tipid"].astype("string")
 
