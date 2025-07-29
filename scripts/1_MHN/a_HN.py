@@ -896,6 +896,38 @@ class HighwayNetwork:
 
         print("Base highway project table checked for errors.\n")
 
+    # function that subsets to certain projects
+    def subset_to_projects(self):
+
+        print("Subsetting to projects...")
+
+        mhn_in_folder = self.mhn_in_folder
+        subset_hwy_path = os.path.join(mhn_in_folder, "subset_hwy_projects.csv")
+
+        subset_df = pd.read_csv(subset_hwy_path).drop_duplicates()
+        subset_df["TIPID"] = subset_df["TIPID"].astype("string")
+
+        all_tipid_list = subset_df[subset_df.ABB == "all"].TIPID.to_list()
+        spec_abb_list = list(subset_df[subset_df.ABB != "all"].set_index(["TIPID", "ABB"]).index.values)
+
+        hwyproj_coding_table = os.path.join(self.current_gdb, "hwyproj_coding")
+
+        fields = ["TIPID", "ABB", "USE"]
+
+        with arcpy.da.UpdateCursor(hwyproj_coding_table, fields) as ucursor:
+            for row in ucursor:
+
+                tipid = row[0]
+                abb = row[1]
+
+                tipid_abb = (tipid, abb)
+                
+                if tipid not in all_tipid_list and tipid_abb not in spec_abb_list:
+                    row[2] = 0
+                    ucursor.updateRow(row)
+
+        print("Subset complete.\n")
+
     # function that copies base links into the combined gdb 
     def copy_hwy_links(self):
 
@@ -1518,6 +1550,9 @@ class HighwayNetwork:
 
         if self.base_year in build_years:
             build_years.remove(self.base_year)
+
+        if subset == True:
+            self.subset_to_projects()
         
         self.create_combined_gdb()
         
@@ -1700,10 +1735,12 @@ class HighwayNetwork:
 if __name__ == "__main__":
 
     start_time = time.time()
+
     HN = HighwayNetwork()
     HN.generate_base_year()
     HN.check_hwy_fcs()
-    HN.import_hwy_project_coding()
+    HN.check_hwy_project_table()
+    HN.subset_to_projects()
 
     end_time = time.time()
     total_time = round(end_time - start_time)
