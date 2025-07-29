@@ -894,6 +894,44 @@ class HighwayNetwork:
 
         error_file.close()
 
+        # write to error excel
+        self.get_hwy_dfs()
+        hwyproj_df = self.hwyproj_df
+
+        xl_path = os.path.join(mhn_out_folder, "base_project_table_errors.xlsx")
+
+        rename_dict = {
+            "TIPID" : "tipid",
+            "ACTION_CODE" : "action",
+            "NEW_DIRECTIONS" : "directions",
+            "NEW_TYPE1" : "type1",
+            "NEW_TYPE2" : "type2",
+            "NEW_AMPM1" : "ampm1",
+            "NEW_AMPM2" : "ampm2",
+            "NEW_POSTEDSPEED1" : "speed1",
+            "NEW_POSTEDSPEED2" : "speed2",
+            "NEW_THRULANES1" : "lanes1",
+            "NEW_THRULANES2" : "lanes2",
+            "NEW_THRULANEWIDTH1" : "feet1",
+            "NEW_THRULANEWIDTH2" : "feet2",
+            "ADD_PARKLANES1" : "parklanes1",
+            "ADD_PARKLANES2" : "parklanes2",
+            "ADD_SIGIC" : "sigic",
+            "ADD_CLTL" : "cltl",
+            "ADD_RRGRADECROSS" : "rr_grade_sep",
+            "NEW_TOLLDOLLARS" : "tolldollars",
+            "NEW_MODES" : "modes",
+            "TOD" : "tod",
+            "ABB": "abb",
+            "REP_ANODE" : "rep_anode",
+            "REP_BNODE" : "rep_bnode"
+        }
+
+        hwyproj_xl_df = hwyproj_df[hwyproj_df.USE == 0].rename(columns = rename_dict)
+        hwyproj_xl_df["anode"] = hwyproj_xl_df["abb"].apply(lambda x: x.split("-")[0])
+        hwyproj_xl_df["bnode"] = hwyproj_xl_df["abb"].apply(lambda x: x.split("-")[1])
+        hwyproj_xl_df.to_excel(xl_path, index = False)
+
         print("Base highway project table checked for errors.\n")
 
     # function that subsets to certain projects
@@ -1738,9 +1776,9 @@ if __name__ == "__main__":
 
     HN = HighwayNetwork()
     HN.generate_base_year()
+    HN.import_hwy_project_coding()
     HN.check_hwy_fcs()
     HN.check_hwy_project_table()
-    HN.subset_to_projects()
 
     end_time = time.time()
     total_time = round(end_time - start_time)
