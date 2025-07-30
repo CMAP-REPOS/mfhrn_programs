@@ -7,6 +7,8 @@ At a conceptual level, the way MHN fits together with the Master Freight Network
 
 The boxes represent input while the circles represent output. As you can see from the diagram, the highway and bus output from the MHN are a crucial first step in freight/travel modeling. 
 
+NOTE: This repository is ONLY for processing. No modeling is done here! 
+
 To get started with this repository, check out the [wiki](https://github.com/CMAP-REPOS/mfhrn_programs/wiki).
 
 ## Objectives 

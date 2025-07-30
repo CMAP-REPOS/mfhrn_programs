@@ -93,57 +93,9 @@ class HighwayNetwork:
         self.years_list = years_list
         self.built_gdbs = []
 
-    # helper function to get dfs 
-    def get_hwy_dfs(self):
+    # MAIN METHODS --------------------------------------------------------------------------------
 
-        hwylink = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
-        hwylink_fields = [f.name for f in arcpy.ListFields(hwylink) if f.type!="Geometry"]
-        self.hwylink_df = pd.DataFrame(
-            data = [row for row in arcpy.da.SearchCursor(hwylink, hwylink_fields)], 
-            columns = hwylink_fields)
-        
-        hwynode = os.path.join(self.current_gdb, "hwynet/hwynet_node")
-        hwynode_fields = [f.name for f in arcpy.ListFields(hwynode) if f.type != "Geometry"]
-        self.hwynode_df = pd.DataFrame(
-            data = [row for row in arcpy.da.SearchCursor(hwynode, hwynode_fields)], 
-            columns = hwynode_fields)
-
-        hwyproj = os.path.join(self.current_gdb, "hwyproj_coding")
-        hwyproj_fields = [f.name for f in arcpy.ListFields(hwyproj)]
-        self.hwyproj_df = pd.DataFrame(
-            data = [row for row in arcpy.da.SearchCursor(hwyproj, hwyproj_fields)], 
-            columns = hwyproj_fields)
-        
-        hwyproj_years = os.path.join(self.current_gdb, "hwynet/hwyproj")
-        hwyproj_years_fields = [f.name for f in arcpy.ListFields(hwyproj_years) if f.type != "Geometry"]
-        self.hwyproj_years_df = pd.DataFrame(
-            data = [row for row in arcpy.da.SearchCursor(hwyproj_years, hwyproj_years_fields)],
-            columns = hwyproj_years_fields)
-        
-    # helper function to delete relationship classes
-    def del_rcs(self):
-
-        for rc in self.rel_classes:
-
-            rc_path = os.path.join(self.current_gdb, rc)
-            if arcpy.Exists(rc_path):
-                arcpy.management.Delete(rc_path)
-
-    # helper function that copies a gdb
-    def copy_gdb_safe(self, input_gdb, output_gdb):
-        while True:
-            try: 
-                if arcpy.Exists(output_gdb):
-                    arcpy.management.Delete(output_gdb)
-                
-                arcpy.management.Copy(input_gdb, output_gdb)
-            except:
-                print("Copying GDB failed. Trying again...")
-                pass
-            else:
-                break
-
-    # function that generates base year gdb
+    # method that generates base year gdb
     def generate_base_year(self):
 
         print("Copying base year...")
@@ -163,7 +115,7 @@ class HighwayNetwork:
         # copy GDB
         out_gdb = os.path.join(mhn_out_folder, f"MHN_{base_year}.gdb")
         self.copy_gdb_safe(in_gdb, out_gdb)
-        self.current_gdb = out_gdb # update the HN's current gdb 
+        self.current_gdb = out_gdb # !!! update the HN's current gdb
 
         self.built_gdbs.append(self.current_gdb)
         self.del_rcs()
@@ -190,7 +142,7 @@ class HighwayNetwork:
 
         print("Base year copied and prepared for modification.\n")
 
-    # function that checks base links + nodes
+    # method that checks the base feature classes
     def check_hwy_fcs(self):
 
         print("Checking feature classes for errors...")
@@ -278,8 +230,8 @@ class HighwayNetwork:
             os.remove(base_project_table_errors)
 
         print("Base feature classes checked for errors.\n")
-     
-    # function that imports highway project coding
+
+    # method that imports highway project coding
     def import_hwy_project_coding(self): 
 
         print("Importing highway project coding...")
@@ -366,43 +318,65 @@ class HighwayNetwork:
             else:
                 insert_rows.append(record)
 
-        fields = [f.name for f in arcpy.ListFields(hwyproj_coding_table) if f.name != "OBJECTID"]
-        # for index, field in enumerate(fields):
-        #     print(index, field)
+        link_fields, lf_dict, proj_fields, pf_dict = self.get_hwy_fields()
 
-        # if it's already in the project table- just update 
+        # get indices of the project coding fields
+        action_pos = pf_dict["ACTION_CODE"]
+        new_directions_pos = pf_dict["NEW_DIRECTIONS"]
+        new_type1_pos = pf_dict["NEW_TYPE1"]
+        new_type2_pos = pf_dict["NEW_TYPE2"]
+        new_ampm1_pos = pf_dict["NEW_AMPM1"]
+        new_ampm2_pos = pf_dict["NEW_AMPM2"]
+        new_speed1_pos = pf_dict["NEW_POSTEDSPEED1"]
+        new_speed2_pos = pf_dict["NEW_POSTEDSPEED2"]
+        new_lanes1_pos = pf_dict["NEW_THRULANES1"]
+        new_lanes2_pos = pf_dict["NEW_THRULANES2"]
+        new_feet1_pos = pf_dict["NEW_THRULANEWIDTH1"]
+        new_feet2_pos = pf_dict["NEW_THRULANEWIDTH2"]
+        add_park1_pos = pf_dict["ADD_PARKLANES1"]
+        add_park2_pos = pf_dict["ADD_PARKLANES2"]
+        add_sigic_pos = pf_dict["ADD_SIGIC"]
+        add_cltl_pos = pf_dict["ADD_CLTL"]
+        add_rr_pos = pf_dict["ADD_RRGRADECROSS"]
+        new_tolldollars_pos = pf_dict["NEW_TOLLDOLLARS"]
+        new_modes_pos = pf_dict["NEW_MODES"]
+        tod_pos = pf_dict["TOD"]
+        rep_anode_pos = pf_dict["REP_ANODE"]
+        rep_bnode_pos = pf_dict["REP_BNODE"]
+        notes_pos = pf_dict["PROCESS_NOTES"]
+
         for update_row in update_rows:
 
             tipid = update_row["tipid"]
             abb = update_row["abb"]
 
             where_clause = f"TIPID = '{tipid}' AND ABB = '{abb}'"
-            with arcpy.da.UpdateCursor(hwyproj_coding_table, fields, where_clause) as ucursor:
+            with arcpy.da.UpdateCursor(hwyproj_coding_table, proj_fields, where_clause) as ucursor:
                 for row in ucursor:
-                    
-                    row[1] = update_row["action"]
-                    row[2] = update_row["directions"]
-                    row[3] = update_row["type1"]
-                    row[4] = update_row["type2"]
-                    row[5] = update_row["ampm1"]
-                    row[6] = update_row["ampm2"]
-                    row[7] = update_row["speed1"]
-                    row[8] = update_row["speed2"]
-                    row[9] = update_row["lanes1"]
-                    row[10] = update_row["lanes2"]
-                    row[11] = update_row["feet1"]
-                    row[12] = update_row["feet2"]
-                    row[13] = update_row["parklanes1"]
-                    row[14] = update_row["parklanes2"]
-                    row[15] = update_row["sigic"]
-                    row[16] = update_row["cltl"]
-                    row[17] = update_row["rr_grade_sep"]
-                    row[18] = update_row["tolldollars"]
-                    row[19] = update_row["modes"]
-                    row[20] = update_row["tod"]
-                    row[22] = update_row["rep_anode"]
-                    row[23] = update_row["rep_bnode"]
-                    row[27] = "Updated from import successfully."
+
+                    row[action_pos] = update_row["action"]
+                    row[new_directions_pos] = update_row["directions"]
+                    row[new_type1_pos] = update_row["type1"]
+                    row[new_type2_pos] = update_row["type2"]
+                    row[new_ampm1_pos] = update_row["ampm1"]
+                    row[new_ampm2_pos] = update_row["ampm2"]
+                    row[new_speed1_pos] = update_row["speed1"]
+                    row[new_speed2_pos] = update_row["speed2"]
+                    row[new_lanes1_pos] = update_row["lanes1"]
+                    row[new_lanes2_pos] = update_row["lanes2"]
+                    row[new_feet1_pos] = update_row["feet1"]
+                    row[new_feet2_pos] = update_row["feet2"]
+                    row[add_park1_pos] = update_row["parklanes1"]
+                    row[add_park2_pos] = update_row["parklanes2"]
+                    row[add_sigic_pos] = update_row["sigic"]
+                    row[add_cltl_pos] = update_row["cltl"]
+                    row[add_rr_pos] = update_row["rr_grade_sep"]
+                    row[new_tolldollars_pos] = update_row["tolldollars"]
+                    row[new_modes_pos] = update_row["modes"]
+                    row[tod_pos] = update_row["tod"]
+                    row[rep_anode_pos] = update_row["rep_anode"]
+                    row[rep_bnode_pos] = update_row["rep_bnode"]
+                    row[notes_pos] = "Updated from import successfully."
 
                     ucursor.updateRow(row)
 
@@ -418,21 +392,22 @@ class HighwayNetwork:
                 if insert_row["tipid"] in hwyproj_years_dict:
                     completion_year = hwyproj_years_dict[insert_row["tipid"]]
 
+                # MAKE SURE THAT THIS IS THE CORRECT ORDER!!! 
                 row = [
                     insert_row["tipid"], 
                     insert_row["action"], 
                     insert_row["directions"],
-                    insert_row["type1"],
+                    insert_row["type1"], 
                     insert_row["type2"],
-                    insert_row["ampm1"],
+                    insert_row["ampm1"], 
                     insert_row["ampm2"],
-                    insert_row["speed1"],
+                    insert_row["speed1"], 
                     insert_row["speed2"],
-                    insert_row["lanes1"],
+                    insert_row["lanes1"], 
                     insert_row["lanes2"],
-                    insert_row["feet1"],
+                    insert_row["feet1"], 
                     insert_row["feet2"],
-                    insert_row["parklanes1"],
+                    insert_row["parklanes1"], 
                     insert_row["parklanes2"],
                     insert_row["sigic"],
                     insert_row["cltl"],
@@ -441,7 +416,7 @@ class HighwayNetwork:
                     insert_row["modes"],
                     insert_row["tod"],
                     insert_row["abb"],
-                    insert_row["rep_anode"],
+                    insert_row["rep_anode"], 
                     insert_row["rep_bnode"],
                     None,
                     completion_year,
@@ -453,7 +428,7 @@ class HighwayNetwork:
 
         print("Highway project coding imported.\n")
 
-    # function that checks the project table
+    # method that checks the project table
     def check_hwy_project_table(self):
 
         print("Checking base project table for errors...")
@@ -494,6 +469,9 @@ class HighwayNetwork:
         toll1_list = hwylink_df[(hwylink_df.TYPE1 == "7") & (hwylink_df.POSTEDSPEED1 == 0)].ABB.to_list()
         toll2_list = hwylink_df[(hwylink_df.TYPE2 == "7") & (hwylink_df.POSTEDSPEED2 == 0)].ABB.to_list()
 
+        tipid_list = self.hwyproj_years_df.TIPID.to_list()
+        abb_list = hwylink_df.ABB.to_list()
+
         hwylink_abb_df = hwylink_df[["ANODE", "BNODE", "BASELINK", "ABB"]]
         hwylink_dup_df = pd.merge(hwylink_abb_df, hwylink_abb_df.copy(), left_on = ["ANODE", "BNODE"], right_on = ["BNODE", "ANODE"])
         hwylink_dup_set = set(hwylink_dup_df.ABB_x.to_list() + hwylink_dup_df.ABB_y.to_list())
@@ -532,266 +510,263 @@ class HighwayNetwork:
         # don't have to check the validity of already discarded rows
         # just count the rows with mistakes
 
+        link_fields, lf_dict, proj_fields, pf_dict = self.get_hwy_fields()
+
+        # get indices of the project coding fields
+        tipid_pos = pf_dict["TIPID"]
+        action_pos = pf_dict["ACTION_CODE"]
+        new_directions_pos = pf_dict["NEW_DIRECTIONS"]
+        new_type1_pos = pf_dict["NEW_TYPE1"]
+        new_type2_pos = pf_dict["NEW_TYPE2"]
+        new_ampm1_pos = pf_dict["NEW_AMPM1"]
+        new_ampm2_pos = pf_dict["NEW_AMPM2"]
+        new_speed1_pos = pf_dict["NEW_POSTEDSPEED1"]
+        new_speed2_pos = pf_dict["NEW_POSTEDSPEED2"]
+        new_lanes1_pos = pf_dict["NEW_THRULANES1"]
+        new_lanes2_pos = pf_dict["NEW_THRULANES2"]
+        new_feet1_pos = pf_dict["NEW_THRULANEWIDTH1"]
+        new_feet2_pos = pf_dict["NEW_THRULANEWIDTH2"]
+        add_park1_pos = pf_dict["ADD_PARKLANES1"]
+        add_park2_pos = pf_dict["ADD_PARKLANES2"]
+        add_sigic_pos = pf_dict["ADD_SIGIC"]
+        add_cltl_pos = pf_dict["ADD_CLTL"]
+        add_rr_pos = pf_dict["ADD_RRGRADECROSS"]
+        new_tolldollars_pos = pf_dict["NEW_TOLLDOLLARS"]
+        new_modes_pos = pf_dict["NEW_MODES"]
+        tod_pos = pf_dict["TOD"]
+        abb_pos = pf_dict["ABB"]
+        rep_anode_pos = pf_dict["REP_ANODE"]
+        rep_bnode_pos = pf_dict["REP_BNODE"]
+        rep_abb_pos = pf_dict["REP_ABB"]
+        use_pos = pf_dict["USE"]
+        notes_pos = pf_dict["PROCESS_NOTES"]
+
         row_fail = 0
         row_warning = 0
-        fields = [f.name for f in arcpy.ListFields(hwyproj_coding_table) if f.name != "OBJECTID"]
         where_clause = "USE = 1"
-        with arcpy.da.UpdateCursor(hwyproj_coding_table, fields, where_clause) as ucursor:
-            for row in ucursor:
-                tipid = row[0] 
-                abb = row[21]
-                # use = row[26], process_notes = row[27]
 
-                # for some reason these are saved as text fields but they should only contain numbers
+        with arcpy.da.UpdateCursor(hwyproj_coding_table, proj_fields, where_clause) as ucursor:
+            for row in ucursor:
+                tipid = row[tipid_pos] 
+                abb = row[abb_pos]
+
+                # these are saved as text fields but technically they should only contain numbers
                 try: 
-                    action_code = int(row[1])
-                    new_directions = int(row[2])
-                    new_type1 = int(row[3]); new_type2 = int(row[4])
-                    new_ampm1 = int(row[5]); new_ampm2 = int(row[6])
-                    new_modes = int(row[19])
+                    action = int(row[action_pos])
+                    new_directions = int(row[new_directions_pos])
+                    new_type1 = int(row[new_type1_pos])
+                    new_type2 = int(row[new_type2_pos])
+                    new_ampm1 = int(row[new_ampm1_pos])
+                    new_ampm2 = int(row[new_ampm2_pos])
+                    new_modes = int(row[new_modes_pos])
                 except:
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Non-numeric values in fields where it should be numeric."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Non-numeric values in fields where it should be numeric."
                     ucursor.updateRow(row)
                     continue
 
-                new_postedspeed1 = row[7]; new_postedspeed2 = row[8]
-                new_thrulanes1 = row[9]; new_thrulanes2 = row[10]
-                new_thrulanewidth1 = row[11]; new_thrulanewidth2 = row[12]
-                add_parklanes1 = row[13]; add_parklanes2 = row[14]
-                add_sigic = row[15]
-                add_cltl = row[16]
-                add_rrgradecross = row[17]
-                new_tolldollars = row[18]
-                rep_abb = row[24]
+                new_speed1 = row[new_speed1_pos]
+                new_speed2 = row[new_speed2_pos]
+                new_lanes1 = row[new_lanes1_pos]
+                new_lanes2 = row[new_lanes2_pos]
+                new_feet1 = row[new_feet1_pos]
+                new_feet2 = row[new_feet2_pos]
+                add_park1 = row[add_park1_pos]
+                add_park2 = row[add_park2_pos]
+                add_sigic = row[add_sigic_pos]
+                add_cltl = row[add_cltl_pos]
+                add_rr = row[add_rr_pos]
+                new_tolldollars = row[new_tolldollars_pos]
+                rep_abb = row[rep_abb_pos]
 
                 # check that TIPID is valid 
-                tipids = self.hwyproj_years_df.TIPID.to_list()
-                if tipid not in tipids: 
+                if tipid not in tipid_list: 
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: TIPID is not a legitimate project."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: TIPID is not a legitimate project."
                     ucursor.updateRow(row)
                     continue
 
                 # check that ABB is valid
-                abbs = self.hwylink_df.ABB.to_list()
-                if abb not in abbs:
+                if abb not in abb_list:
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: ABB is not an actual link."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: ABB is not an actual link."
                     ucursor.updateRow(row)
                     continue
 
                 # check that values are within range 
-                if action_code not in [1, 2, 3, 4]:
+                if action not in [1, 2, 3, 4]:
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Action code is not valid."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Action code is not valid."
                     ucursor.updateRow(row)
                     continue
                 if new_directions not in [0, 1, 2, 3]:
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Directions flag is not valid."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Directions flag is not valid."
                     ucursor.updateRow(row)
                     continue
-                if new_type1 not in [0, 1, 2, 3, 4, 5, 6, 7, 8]:
+                valid_types = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+                if (new_type1 not in valid_types) or (new_type2 not in valid_types):
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Type 1 flag is not valid."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Type flag(s) are not valid."
                     ucursor.updateRow(row)
                     continue
-                if new_type2 not in [0, 1, 2, 3, 4, 5, 6, 7, 8]:
+                valid_ampm_codes = [0, 1, 2, 3, 4]
+                if (new_ampm1 not in valid_ampm_codes) or (new_ampm2 not in valid_ampm_codes):
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Type 2 flag is not valid."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: AMPM flag(s) are not valid."
                     ucursor.updateRow(row)
                     continue
-                if new_ampm1 not in [0, 1, 2, 3, 4]:
+                if new_speed1 < 0 or new_speed2 < 0:
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: AMPM 1 flag is not valid."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Posted speed flag(s) are not valid."
                     ucursor.updateRow(row)
                     continue
-                if new_ampm2 not in [0, 1, 2, 3, 4]:
+                if new_lanes1 < 0 or new_lanes2 < 0: 
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: AMPM 2 flag is not valid."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Lane flag(s) are not valid."
                     ucursor.updateRow(row)
                     continue
-                if new_postedspeed1 < 0:
+                if new_feet1 < 0 or new_feet2 < 0: 
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Posted speed 1 flag is not valid."
-                    ucursor.updateRow(row)
-                    continue
-                if new_postedspeed2 < 0:
-                    row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Posted speed 2 flag is not valid."
-                    ucursor.updateRow(row)
-                    continue
-                if new_thrulanes1 < 0: 
-                    row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Through lanes 1 flag is not valid."
-                    ucursor.updateRow(row)
-                    continue
-                if new_thrulanes2 < 0:
-                    row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Through lanes 2 flag is not valid."
-                    ucursor.updateRow(row)
-                    continue
-                if new_thrulanewidth1 < 0: 
-                    row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Through lanes width 1 flag is not valid."
-                    ucursor.updateRow(row)
-                    continue
-                if new_thrulanewidth2 < 0:
-                    row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Through lanes width 2 flag is not valid."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Lane width flag(s) are not valid."
                     ucursor.updateRow(row)
                     continue
                 if add_sigic not in [0, 1]:
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Sigic flag is not valid."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Sigic flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if add_cltl not in [-1, 0, 1]:
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Cltl flag is not valid."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Cltl flag is not valid."
                     ucursor.updateRow(row)
                     continue
-                if add_rrgradecross not in [-1, 0, 1]: 
+                if add_rr not in [-1, 0, 1]: 
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Railroad crossing flag is not valid."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Railroad crossing flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if new_tolldollars < 0: 
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Toll dollar flag is not valid."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Toll dollar flag is not valid."
                     ucursor.updateRow(row)
                     continue
                 if new_modes not in [0, 1, 2, 3, 4, 5]:
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Mode flag is not valid."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Mode flag is not valid."
                     ucursor.updateRow(row)
                     continue
 
                 # check that action codes are valid. 
                 baselink = int(abb[-1])
-                if baselink == 0 and action_code not in [2, 4]:
+                if baselink == 0 and action not in [2, 4]:
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Skeleton links cannot have action codes 1 or 3 applied to them."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Skeleton links cannot have action codes 1 or 3 applied to them."
                     ucursor.updateRow(row)
                     continue
-                if baselink == 1 and action_code not in [1,3]:
+                if baselink == 1 and action not in [1,3]:
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Regular links cannot have action codes 2 or 4 applied to them."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Regular links cannot have action codes 2 or 4 applied to them."
                     ucursor.updateRow(row)
                     continue
 
                 # check that REP_ANODE + REP_BNODE are only associated with Action Code 2 
-                if action_code in [1, 3, 4] and rep_abb != "0":
+                if action in [1, 3, 4] and rep_abb != "0":
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: REP_ANODE + REP_BNODE are invalid if action code != 2."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: REP_ANODE + REP_BNODE are invalid if action code != 2."
                     ucursor.updateRow(row)
                     continue
 
                 # check that action codes 2 + 3 don't have other attributes filled in 
                 attributes = [new_directions, new_type1, new_type2, new_ampm1, new_ampm2,
-                              new_postedspeed1, new_postedspeed2, new_thrulanes1, new_thrulanes2, 
-                              new_thrulanewidth1, new_thrulanewidth2, add_parklanes1, add_parklanes2,
-                              add_sigic, add_cltl, add_rrgradecross, new_tolldollars, new_modes]
+                              new_speed1, new_speed2, new_lanes1, new_lanes2, new_lanes1, new_lanes2, add_park1, add_park2,
+                              add_sigic, add_cltl, add_rr, new_tolldollars, new_modes]
                 
-                if action_code in [2, 3] and any(attribute != 0 for attribute in attributes):
+                if action in [2, 3] and any(attribute != 0 for attribute in attributes):
                     row_fail+=1
-                    row[26] = 0
-                    row[27] = "Error: Action Codes 2 + 3 should not be associated with any other attributes."
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Action Codes 2 + 3 should not be associated with any other attributes."
                     ucursor.updateRow(row)
                     continue
 
                 # if action code 2, REP_ABB must exist 
-                if action_code == 2 and rep_abb == "0":
+                if action == 2 and rep_abb == "0":
                     row_fail+=1
-                    row[26] = 0 
-                    row[27] = "Error: Action code 2 must be associated with a valid REP_ABB."
-                    ucursor.updateRow(row)
-                    continue
-
-                # if action code 2, REP_ABB must be a regular link
-                if action_code == 2 and rep_abb[-1] != "1":
-                    row_fail+=1
-                    row[26] = 0 
-                    row[27] = "Error: Action code 2 must replace a regular link."
+                    row[use_pos] = 0 
+                    row[notes_pos] = "Error: Action code 2 must be associated with a valid REP_ABB."
                     ucursor.updateRow(row)
                     continue
 
                 # if action code = 4, then required attributes must be filled
-                req_fields = [new_directions, new_type1, new_ampm1, new_thrulanes1, new_thrulanewidth1, new_modes]
-                if action_code == 4:
+                req_fields = [new_directions, new_type1, new_ampm1, new_lanes1, new_feet1, new_modes]
+                if action == 4:
                     if any(field == 0 for field in req_fields):
                         row_fail+=1
-                        row[26] = 0 
-                        row[27] = "Error: Missing required attribute(s) on new link."
+                        row[use_pos] = 0 
+                        row[notes_pos] = "Error: Missing required attribute(s) on new link."
                         ucursor.updateRow(row)
                         continue
-                    elif new_type1 != 7 and new_postedspeed1 == 0:
+                    elif new_type1 != 7 and new_speed1 == 0:
                         row_fail+=1
-                        row[26] = 0 
-                        row[27] = "Error: Missing speed 1 on new link."
+                        row[use_pos] = 0 
+                        row[notes_pos] = "Error: Missing speed 1 on new link."
                         ucursor.updateRow(row)
                         continue
 
                 # if action code = 1 or 4 and directions = 1 or 2
                 # then all 2 fields should be 0 
-                all_fields2 = [new_type2, new_ampm2, new_postedspeed2, new_thrulanes2, new_thrulanewidth2, add_parklanes2]
+                all_fields2 = [new_type2, new_ampm2, new_speed2, new_lanes2, new_feet2, add_park2]
 
-                if action_code in [1, 4] and new_directions in [1,2]:
+                if action in [1, 4] and new_directions in [1,2]:
                     if any(field2 != 0 for field2 in all_fields2):
                         row_fail+=1
-                        row[26] = 0 
-                        row[27] = f"Error: Unusable '2' attributes for this direction = {new_directions} link."
+                        row[use_pos] = 0 
+                        row[notes_pos] = f"Error: Unusable '2' attributes for this direction = {new_directions} link."
                         ucursor.updateRow(row)
                         continue
-                    
+
                 # if action code = 1 or 4 and directions = 3 
                 # then new_type2, new_ampm2, new_thrulanes2, + new_thrulanes2 should not be 0 
-                req_fields2 = [new_type2, new_ampm2, new_thrulanes2, new_thrulanewidth2]
+                req_fields2 = [new_type2, new_ampm2, new_lanes2, new_feet2]
 
-                if action_code in [1, 4] and new_directions == 3:
+                if action in [1, 4] and new_directions == 3:
                     if any(field2 == 0 for field2 in req_fields2):
                         row_fail+=1
-                        row[26] = 0 
-                        row[27] = "Error: Missing '2' attributes for this direction = 3 link."
+                        row[use_pos] = 0 
+                        row[notes_pos] = "Error: Missing '2' attributes for this direction = 3 link."
                         ucursor.updateRow(row)
                         continue 
-                    elif new_type2 !=7 and new_postedspeed2 == 0:
+                    elif new_type2 !=7 and new_speed2 == 0:
                         row_fail+=1
-                        row[26] = 0
-                        row[27] = "Error: Missing speed 2 on this direction = 3 link."
+                        row[use_pos] = 0
+                        row[notes_pos] = "Error: Missing speed 2 on this direction = 3 link."
                         ucursor.updateRow(row)
                         continue
 
                 # if link has potential for duplication
                 # action code 2 should not be applied to it 
-                if action_code == 2 and abb in hwylink_dup_set:
+                if action == 2 and abb in hwylink_dup_set:
                     row_fail+=1
-                    row[26] = 0 
-                    row[27] = "Error: Use action code 4 on a link with potential issues with duplication."
+                    row[use_pos] = 0 
+                    row[notes_pos] = "Error: Use action code 4 on a link with potential issues with duplication."
                     ucursor.updateRow(row)
                     continue
 
@@ -799,42 +774,42 @@ class HighwayNetwork:
                 # cannot set new directions > 1 
                 if new_directions > 1 and abb in hwylink_dup_set:
                     row_fail+=1
-                    row[26] = 0 
-                    row[27] = "Error: cannot set NEW_DIRECTIONS > 1 or else issue with duplication."
+                    row[use_pos] = 0 
+                    row[notes_pos] = "Error: cannot set NEW_DIRECTIONS > 1 or else issue with duplication."
                     ucursor.updateRow(row)
                     continue
 
                 # very specific situation with toll plazas
-                if action_code == 1 and abb in toll1_list:
-                    if new_type1 != 0 and new_postedspeed1 == 0: 
+                if action == 1 and abb in toll1_list:
+                    if new_type1 != 0 and new_speed1 == 0: 
                         row_fail+=1
-                        row[26] = 0 
-                        row[27] = "Error: Missing new posted speed 1 on a link which changed from a toll plaza."
+                        row[use_pos] = 0 
+                        row[notes_pos] = "Error: Missing new posted speed 1 on a link which changed from a toll plaza."
                         ucursor.updateRow(row)
                         continue
 
-                if action_code == 1 and abb in toll2_list:
-                    if new_type2 != 0 and new_postedspeed2 == 0:
+                if action == 1 and abb in toll2_list:
+                    if new_type2 != 0 and new_speed2 == 0:
                         row_fail+=1
-                        row[26] = 0
-                        row[27] = "Error: Missing new posted speed 2 on a link which changed from a toll plaza."
+                        row[use_pos] = 0
+                        row[notes_pos] = "Error: Missing new posted speed 2 on a link which changed from a toll plaza."
                         ucursor.updateRow(row)
                         continue
 
                 # action code 1 should have at least 1 attribute filled in. 
-                if action_code == 1 and all(attribute == 0 for attribute in attributes):
+                if action == 1 and all(attribute == 0 for attribute in attributes):
                     row_warning +=1
-                    row[27] = "Warning: Action Code 1 should make at least one modification."
+                    row[notes_pos] = "Warning: Action Code 1 should make at least one modification."
                     ucursor.updateRow(row)
                     continue
 
                 # warn for links with potential duplication issues 
                 if abb in hwylink_dup_set:
                     row_warning +=1 
-                    row[27] = "Warning: changes on links with duplication potential should be reviewed."
+                    row[notes_pos] = "Warning: changes on links with duplication potential should be reviewed."
                     ucursor.updateRow(row)
                     continue
-            
+
             # out of for loop
         
         # out of cursor
@@ -867,9 +842,9 @@ class HighwayNetwork:
 
             overlap_24_string = str(overlap_24_set)[1:-1]
             where_clause = f"ABB in ({overlap_24_string})"
-            with arcpy.da.UpdateCursor(hwyproj_coding_table, fields, where_clause) as ucursor:
+            with arcpy.da.UpdateCursor(hwyproj_coding_table, proj_fields, where_clause) as ucursor:
                 for row in ucursor:
-                    row[27] = "Warning: Link has both action codes 2 and 4 applied to it."
+                    row[notes_pos] = "Warning: Link has both action codes 2 and 4 applied to it."
                     ucursor.updateRow(row)
 
             error_file.write(f"Links {overlap_24_string} have both action codes 2 and 4 applied to it.\n")
@@ -887,9 +862,9 @@ class HighwayNetwork:
         
             no_delete_string = str(no_delete_set)[1:-1]
             where_clause = f"REP_ABB in ({no_delete_string})"
-            with arcpy.da.UpdateCursor(hwyproj_coding_table, fields, where_clause) as ucursor:
+            with arcpy.da.UpdateCursor(hwyproj_coding_table, proj_fields, where_clause) as ucursor:
                 for row in ucursor:
-                    row[27] = "Warning: Replaced link is not also deleted."
+                    row[notes_pos] = "Warning: Replaced link is not also deleted."
                     ucursor.updateRow(row)
 
             error_file.write(f"These 'replaced' links {no_delete_string} are not also deleted.\n")
@@ -939,651 +914,7 @@ class HighwayNetwork:
 
         print("Base highway project table checked for errors.\n")
 
-    # function that subsets to certain projects
-    def subset_to_projects(self):
-
-        print("Subsetting to projects...")
-
-        mhn_in_folder = self.mhn_in_folder
-        subset_hwy_path = os.path.join(mhn_in_folder, "subset_hwy_projects.csv")
-
-        subset_df = pd.read_csv(subset_hwy_path).drop_duplicates()
-        subset_df["TIPID"] = subset_df["TIPID"].astype("string")
-
-        all_tipid_list = subset_df[subset_df.ABB == "all"].TIPID.to_list()
-        spec_abb_list = list(subset_df[subset_df.ABB != "all"].set_index(["TIPID", "ABB"]).index.values)
-
-        hwyproj_coding_table = os.path.join(self.current_gdb, "hwyproj_coding")
-
-        fields = ["TIPID", "ABB", "USE"]
-
-        with arcpy.da.UpdateCursor(hwyproj_coding_table, fields) as ucursor:
-            for row in ucursor:
-
-                tipid = row[0]
-                abb = row[1]
-
-                tipid_abb = (tipid, abb)
-                
-                if tipid not in all_tipid_list and tipid_abb not in spec_abb_list:
-                    row[2] = 0
-                    ucursor.updateRow(row)
-
-        print("Subset complete.\n")
-
-    # function that copies base links into the combined gdb 
-    def copy_hwy_links(self):
-
-        mhn_out_folder = self.mhn_out_folder
-        mhn_all_name = "MHN_all.gdb"
-        mhn_all_gdb = os.path.join(mhn_out_folder, mhn_all_name)
-
-        hwylink = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
-        link_workspace = os.path.join(mhn_all_gdb, "hwylinks_all")
-
-        base_links_name = f"HWYLINK_{self.base_year}"
-        arcpy.management.CreateFeatureclass(link_workspace, base_links_name, template = hwylink, spatial_reference = 26771)
-        base_links = os.path.join(link_workspace, base_links_name)
-
-        hwylink_fields = [f.name for f in arcpy.ListFields(hwylink) if f.name != "OBJECTID" and f.type != "Geometry"]
-        hwylink_fields += ["SHAPE@"]
-
-        with arcpy.da.SearchCursor(hwylink, hwylink_fields) as scursor:
-            with arcpy.da.InsertCursor(base_links, hwylink_fields) as icursor:
-
-                for row in scursor:
-                    icursor.insertRow(row)
-
-    # function that creates a gdb of all built years 
-    def create_combined_gdb(self):
-
-        print("Creating combined gdb...")
-
-        final_year = max(self.years_list)
-        mhn_out_folder = self.mhn_out_folder
-
-        # create a combined gdb to store + check final output 
-        mhn_all_name = "MHN_all.gdb"
-        mhn_all_gdb = os.path.join(mhn_out_folder, mhn_all_name)
-        arcpy.management.CreateFileGDB(mhn_out_folder, mhn_all_name)
-
-        # make an fc of the projects which will be applied 
-        arcpy.management.CreateFeatureclass(mhn_all_gdb, "hwyproj_applied", "POLYLINE", spatial_reference = 26771)
-        hwyproj_applied = os.path.join(mhn_all_gdb, "hwyproj_applied")
-
-        hwyproj = os.path.join(self.current_gdb, "hwyproj_coding")
-        hwyproj_fields = [[f.name, f.type] for f in arcpy.ListFields(hwyproj) if (f.name != "OBJECTID")]
-        hwyproj_fields_2 = [f.name for f in arcpy.ListFields(hwyproj) if (f.name != ("OBJECTID"))]
-
-        arcpy.management.AddFields(hwyproj_applied, hwyproj_fields)
-
-        where_clause = f"USE = 1 AND COMPLETION_YEAR <= {final_year}"
-        with arcpy.da.SearchCursor(hwyproj, hwyproj_fields_2, where_clause) as scursor:
-            with arcpy.da.InsertCursor(hwyproj_applied, hwyproj_fields_2) as icursor:
-
-                for row in scursor:
-                    icursor.insertRow(row)
-
-        geom_fields = ["SHAPE@", "ABB"]
-        hwylink = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
-        
-        with arcpy.da.UpdateCursor(hwyproj_applied, geom_fields) as ucursor:
-            for u_row in ucursor:
-
-                abb = u_row[1]
-
-                geom = None
-                where_clause = f"ABB = '{abb}'"
-
-                with arcpy.da.SearchCursor(hwylink, geom_fields, where_clause) as scursor:
-                    for s_row in scursor:
-
-                        geom = s_row[0]
-
-                ucursor.updateRow([geom, abb])
-
-        # make an fc of the links which had multiple updates 
-        hwyproj_multiple = os.path.join(mhn_all_gdb, "hwyproj_multiple")
-        arcpy.management.Sort(hwyproj_applied, hwyproj_multiple, "COMPLETION_YEAR")
-
-        hwyproj_df = self.hwyproj_df
-        hwyproj_df_use = hwyproj_df[(hwyproj_df.USE == 1) & (hwyproj_df.COMPLETION_YEAR <= final_year)]
-        hwyproj_multiple_dict = hwyproj_df_use.ABB.value_counts()[hwyproj_df_use.ABB.value_counts() >= 2].to_dict()
-
-        with arcpy.da.UpdateCursor(hwyproj_multiple, "ABB") as ucursor:
-            for row in ucursor:
-
-                if row[0] not in hwyproj_multiple_dict:
-                    ucursor.deleteRow()
-
-        # copy the nodes 
-        hwynode = os.path.join(self.current_gdb, "hwynet/hwynet_node")
-        arcpy.management.CreateFeatureclass(mhn_all_gdb, "hwynode_all", template = hwynode, spatial_reference = 26771)
-        hwynode_all = os.path.join(mhn_all_gdb, "hwynode_all")
-        hwynode_fields = [f.name for f in arcpy.ListFields(hwynode) if f.name != "OBJECTID" and f.type != "Geometry"]
-        hwynode_fields += ["SHAPE@XY"]
-
-        with arcpy.da.SearchCursor(hwynode, hwynode_fields) as scursor:
-            with arcpy.da.InsertCursor(hwynode_all, hwynode_fields) as icursor:
-
-                for row in scursor:
-                    icursor.insertRow(row)
-
-        # create a feature dataset to store the links 
-        # then copy over the base links
-        arcpy.management.CreateFeatureDataset(mhn_all_gdb, "hwylinks_all", spatial_reference = 26771)
-        self.copy_hwy_links()
-        
-        print("Combined gdb created.\n")
-
-    # function that moves the base year up one year
-    def hwy_forward_one_year(self):
-        
-        current_year = self.base_year + 1 
-
-        self.get_hwy_dfs()
-        hwyproj_df = self.hwyproj_df[self.hwyproj_df.USE == 1] # Only want the valid projects
-
-        year_projects = hwyproj_df[hwyproj_df.COMPLETION_YEAR == current_year]
-        year_projects = year_projects.set_index(["TIPID", "ABB"]).drop(columns = ["OBJECTID", "USE", "PROCESS_NOTES"])
-        action_1_dict = year_projects[year_projects.ACTION_CODE == "1"].to_dict("index")
-        action_2_dict = year_projects[year_projects.ACTION_CODE == "2"].to_dict("index")
-        action_3_dict = year_projects[year_projects.ACTION_CODE == "3"].to_dict("index")
-        action_4_dict = year_projects[year_projects.ACTION_CODE == "4"].to_dict("index")
-
-        # these fields will change
-
-        hwylink_fc = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
-        hwyproj_table = os.path.join(self.current_gdb, "hwyproj_coding")
-
-        exclude_fields = ["OBJECTID", "ANODE", "BNODE", "BASELINK"]
-        link_fields = [f.name for f in arcpy.ListFields(hwylink_fc) if (f.type!="Geometry" and f.name not in exclude_fields)]
-        # for index, field in enumerate(link_fields):
-        #     print(index, field)
-        proj_fields = [f.name for f in arcpy.ListFields(hwyproj_table) if f.name != "OBJECTID"]
-        # for index, field in enumerate(proj_fields):
-        #     print(index, field)
-
-        if len(action_1_dict) > 0:
-
-            for action in action_1_dict:
-
-                project = action[0]
-                abb = action[1]
-
-                edits = action_1_dict[action]
-                new_directions = edits["NEW_DIRECTIONS"]
-                new_type1 = edits["NEW_TYPE1"]
-                new_type2 = edits["NEW_TYPE2"]
-                new_ampm1 = edits["NEW_AMPM1"]
-                new_ampm2 = edits["NEW_AMPM2"]
-                new_postedspeed1 = edits["NEW_POSTEDSPEED1"]
-                new_postedspeed2 = edits["NEW_POSTEDSPEED2"]
-                new_thrulanes1 = edits["NEW_THRULANES1"]
-                new_thrulanes2 = edits["NEW_THRULANES2"]
-                new_thrulanewidth1 = edits["NEW_THRULANEWIDTH1"]
-                new_thrulanewidth2 = edits["NEW_THRULANEWIDTH2"]
-                add_parklanes1 = edits["ADD_PARKLANES1"]
-                add_parklanes2 = edits["ADD_PARKLANES2"]
-                add_sigic = edits["ADD_SIGIC"]
-                add_cltl = edits["ADD_CLTL"]
-                add_rrgradecross = edits["ADD_RRGRADECROSS"]
-                new_tolldollars = edits["NEW_TOLLDOLLARS"]
-                new_modes = edits["NEW_MODES"]
-
-                where_clause = f"ABB = '{abb}'"
-                with arcpy.da.UpdateCursor(hwylink_fc, link_fields, where_clause) as ucursor:
-                    for row in ucursor:
-
-                        row[2] = new_directions if new_directions != "0" else row[2]
-                        row[3] = new_type1 if new_type1 != "0" else row[3]
-                        row[4] = new_type2 if new_type2 != "0" else row[4]
-                        row[5] = new_ampm1 if new_ampm1 != "0" else row[5]
-                        row[6] = new_ampm2 if new_ampm2 != "0" else row[6]
-                        row[7] = new_postedspeed1 if new_postedspeed1 != 0 else row[7]
-                        row[8] = new_postedspeed2 if new_postedspeed2 != 0 else row[8]
-                        row[9] = new_thrulanes1 if new_thrulanes1 != 0 else row[9]
-                        row[10] = new_thrulanes2 if new_thrulanes2 != 0 else row[10]
-                        row[11] = new_thrulanewidth1 if new_thrulanewidth1 != 0 else row[11]
-                        row[12] = new_thrulanewidth2 if new_thrulanewidth2 != 0 else row[12]
-                        row[13] = max((row[13] + add_parklanes1), 0)
-                        row[14] = max((row[14] + add_parklanes2), 0)
-                        row[17] = min(max((row[17] + add_sigic), 0), 1)
-                        row[18] = min(max((row[18] + add_cltl), 0), 1)
-                        row[19] = min(max((row[19] + add_rrgradecross), 0), 1)
-                        row[21] = new_tolldollars if new_tolldollars != 0 else row[21]
-                        row[22] = new_modes if new_modes != "0" else row[22]
-                        row[36] = project
-                        row[37] = f"Modified in {current_year}"
-
-                        # if directions = 1 or 2
-                        # empty all "2" fields
-                        if row[2] in ["1", "2"]:
-                            row[4] = "0"
-                            row[6] = "0"
-                            row[8] = 0
-                            row[10] = 0
-                            row[12] = 0
-                            row[14] = 0
-                        
-                        if row[2] == "1":
-                            row[16] = ""
-
-                        ucursor.updateRow(row)
-
-                where_clause = "USE = 1 "
-                where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
-                where_clause += "AND ACTION_CODE = '1'"
-
-                # if modified and modified again
-                with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
-                    for row in ucursor:
-                        row[2] = "0" if row[2] == new_directions else row[2]
-                        row[3] = "0" if row[3] == new_type1 else row[3]
-                        row[4] = "0" if row[4] == new_type2 else row[4]
-                        row[5] = "0" if row[5] == new_ampm1 else row[5]
-                        row[6] = "0" if row[6] == new_ampm2 else row[6]
-                        row[7] = 0 if row[7] == new_postedspeed1 else row[7]
-                        row[8] = 0 if row[8] == new_postedspeed2 else row[8]
-                        row[9] = 0 if row[9] == new_thrulanes1 else row[9]
-                        row[10] = 0 if row[10] == new_thrulanes2 else row[10]
-                        row[11] = 0 if row[11] == new_thrulanewidth1 else row[11]
-                        row[12] = 0 if row[12] == new_thrulanewidth2 else row[12]
-                        row[13] = row[13] - add_parklanes1 if row[13] != 0 else 0
-                        row[14] = row[14] - add_parklanes2 if row[14] != 0 else 0
-                        row[15] = 0 if row[15] == add_sigic else row[15]
-                        row[16] = 0 if row[16] == add_cltl else row[16]
-                        row[17] = 0 if row[17] == add_rrgradecross else row[17]
-                        row[18] = 0 if row[18] == new_tolldollars else row[18]
-                        row[19] = "0" if row[19] == new_modes else row[19]
-
-                        row[27] = f"Modified in {current_year}"
-                        ucursor.updateRow(row)
-
-                # if modified and deleted- no impact
-                where_clause = "USE = 1 "
-                where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
-                where_clause += "AND ACTION_CODE = '3'"
-                with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
-                    for row in ucursor:
-
-                        row[27] = f"Modified in {current_year}"
-                        ucursor.updateRow(row)
-                    
-        if len(action_2_dict) > 0:
-            
-            # invert action_2_dict
-
-            inverted_2_dict = {}
-            for action in action_2_dict:
-
-                project = action[0]
-                abb = action[1]
-                edits = action_2_dict[action]
-                rep_abb = edits["REP_ABB"]
-
-                if (project, rep_abb) not in inverted_2_dict:
-                    inverted_2_dict[(project, rep_abb)] = [abb]
-                else:
-                    inverted_2_dict[(project, rep_abb)].append(abb)
-                
-            for action in inverted_2_dict:
-
-                project = action[0]
-                rep_abb = action[1]
-                abb_list = inverted_2_dict[action]
-                abb_list_string = [f"'{abb}'" for abb in abb_list]
-                abb_string = ", ".join(abb_list_string)
-
-                directions = "0"
-                type1 = "0"
-                type2 = "0"
-                ampm1 = "0"
-                ampm2 = "0"
-                postedspeed1 = 0 
-                postedspeed2 = 0
-                thrulanes1 = 0
-                thrulanes2 = 0
-                thrulanewidth1 = 0
-                thrulanewidth2 = 0
-                parklanes1 = 0
-                parklanes2 = 0
-                sigic = 0
-                cltl = 0
-                rrgradecross = 0
-                tollsys = 0
-                tolldollars = 0
-                modes = "0"
-                truckrte = "0"
-                truckres = "0"
-                vclearance = 0
-                meso = 0
-
-                s_where_clause = f"ABB = '{rep_abb}'"
-                u_where_clause = f"ABB in ({abb_string})"
-
-                # get the attributes from the regular link
-                with arcpy.da.SearchCursor(hwylink_fc, link_fields, s_where_clause) as scursor:
-                    for row in scursor:
-                        directions = row[2]
-                        type1 = row[3]
-                        type2 = row[4]
-                        ampm1 = row[5]
-                        ampm2 = row[6]
-                        postedspeed1 = row[7]
-                        postedspeed2 = row[8]
-                        thrulanes1 = row[9]
-                        thrulanes2 = row[10]
-                        thrulanewidth1 = row[11]
-                        thrulanewidth2 = row[12]
-                        parklanes1 = row[13]
-                        parklanes2 = row[14]
-                        sigic = row[17]
-                        cltl = row[18]
-                        rrgradecross = row[19]
-                        tollsys = row[20]
-                        tolldollars = row[21]
-                        modes = row[22]
-                        truckrte = row[26]
-                        truckres = row[27]
-                        vclearance = row[29]
-                        meso = row[32]
-
-                # and give them to the skeleton link
-                with arcpy.da.UpdateCursor(hwylink_fc, link_fields, u_where_clause) as ucursor:
-                    for row in ucursor:
-
-                        row[2] = directions
-                        row[3] = type1
-                        row[4] = type2
-                        row[5] = ampm1
-                        row[6] = ampm2
-                        row[7] = postedspeed1 
-                        row[8] = postedspeed2
-                        row[9] = thrulanes1
-                        row[10] = thrulanes2
-                        row[11] = thrulanewidth1
-                        row[12] = thrulanewidth2
-                        row[13] = parklanes1
-                        row[14] = parklanes2
-                        row[17] = sigic
-                        row[18] = cltl
-                        row[19] = rrgradecross
-                        row[20] = tollsys
-                        row[21] = tolldollars
-                        row[22] = modes
-                        row[26] = truckrte
-                        row[27] = truckres
-                        row[29] = vclearance
-                        row[32] = meso
-
-                        row[35] = "1"
-                        row[36] = project
-                        row[37] = f"Replaced {rep_abb} in {current_year}"
-                        ucursor.updateRow(row)
-
-                for abb in abb_list:
-
-                    # if you replaced a link once, you can't replace it again
-                    where_clause = "USE = 1 "
-                    where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
-                    where_clause += "AND ACTION_CODE = '2'"
-                    
-                    with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
-                        for row in ucursor: 
-
-                            row[26] = 0
-                            row[27] = f"Replaced {rep_abb} in {current_year}"
-
-                            ucursor.updateRow(row)
-
-                    # if you replaced a link, you can't add it again - only modify
-                    where_clause = "USE = 1 "
-                    where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
-                    where_clause += "AND ACTION_CODE = '4'"
-
-                    with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
-                        for row in ucursor: 
-
-                            row[1] = "1" # new action code - 1 
-
-                            row[2] = 0 if row[2] == directions else row[2]
-                            row[3] = 0 if row[3] == type1 else row[3]
-                            row[4] = 0 if row[4] == type2 else row[4]
-                            row[5] = 0 if row[5] == ampm1 else row[5]
-                            row[6] = 0 if row[6] == ampm2 else row[6]
-                            row[7] = 0 if row[7] == postedspeed1 else row[7]
-                            row[8] = 0 if row[8] == postedspeed2 else row[8]
-                            row[9] = 0 if row[9] == thrulanes1 else row[9]
-                            row[10] = 0 if row[10] == thrulanes2 else row[10]
-                            row[11] = 0 if row[11] == thrulanewidth1 else row[11]
-                            row[12] = 0 if row[12] == thrulanewidth2 else row[12]
-                            row[13] = row[13] - parklanes1 if row[13] != 0 else 0
-                            row[14] = row[14] - parklanes2 if row[14] != 0 else 0
-                            row[15] = 0 if row[15] == sigic else row[15]
-                            row[16] = 0 if row[16] == cltl else row[16]
-                            row[17] = 0 if row[17] == rrgradecross else row[17]
-                            row[18] = 0 if row[18] == tolldollars else row[18]
-                            row[19] = 0 if row[19] == modes else row[19]
-          
-                            row[27] = f"Replaced {rep_abb} in {current_year}"
-
-                            ucursor.updateRow(row)
-
-        if len(action_3_dict) > 0:
-            
-            for action in action_3_dict:
-
-                project = action[0]
-                abb = action[1]
-
-                directions = "0"
-                type1 = "0"
-                type2 = "0"
-                ampm1 = "0"
-                ampm2 = "0"
-                postedspeed1 = 0 
-                postedspeed2 = 0
-                thrulanes1 = 0
-                thrulanes2 = 0
-                thrulanewidth1 = 0
-                thrulanewidth2 = 0
-                parklanes1 = 0
-                parklanes2 = 0
-                sigic = 0
-                cltl = 0
-                rrgradecross = 0
-                tolldollars = 0
-                modes = "0"
-
-                # set to skeleton link but get attributes
-                where_clause = f"ABB = '{abb}'"
-                with arcpy.da.UpdateCursor(hwylink_fc, link_fields, where_clause) as ucursor:
-                    for row in ucursor:
-
-                        directions = row[2]
-                        type1 = row[3]
-                        type2 = row[4]
-                        ampm1 = row[5]
-                        ampm2 = row[6]
-                        postedspeed1 = row[7]
-                        postedspeed2 = row[8]
-                        thrulanes1 = row[9]
-                        thrulanes2 = row[10]
-                        thrulanewidth1 = row[11]
-                        thrulanewidth2 = row[12]
-                        parklanes1 = row[13]
-                        parklanes2 = row[14]
-                        sigic = row[17]
-                        cltl = row[18]
-                        rrgradecross = row[19]
-                        tolldollars = row[21]
-                        modes = row[22]
-
-                        row[35] = "0"
-                        row[36] = project
-                        row[37] = f"Deleted in {current_year}"
-
-                        ucursor.updateRow(row)
-
-                # if a link is deleted, it cannot be modified or deleted again
-                where_clause = "USE = 1 "
-                where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
-                where_clause += "AND ACTION_CODE in ('1', '3')"
-
-                with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
-                    for row in ucursor:
-                        row[26] = 0 
-                        row[27] = f"Deleted in {current_year}"
-
-                        ucursor.updateRow(row)
-
-                where_clause = "USE = 1 "
-                where_clause += f"AND REP_ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
-                where_clause += "AND ACTION_CODE = '2'"
-
-                # if a link is deleted
-                # a skeleton that replaces it, is now added 
-                with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
-                    for row in ucursor:
-
-                        row[1] = 4 # becomes add 
-
-                        row[2] = directions
-                        row[3] = type1
-                        row[4] = type2
-                        row[5] = ampm1
-                        row[6] = ampm2
-                        row[7] = postedspeed1
-                        row[8] = postedspeed2
-                        row[9] = thrulanes1
-                        row[10] = thrulanes2
-                        row[11] = thrulanewidth1
-                        row[12] = thrulanewidth2
-                        row[13] = parklanes1
-                        row[14] = parklanes2
-                        row[15] = sigic
-                        row[16] = cltl
-                        row[17] = rrgradecross
-                        row[18] = tolldollars
-                        row[19] = modes
-                        
-                        row[22] = 0 # rep_anode = 0
-                        row[23] = 0 # rep_bnode = 0
-
-                        row[27] = f"Deleted replacement link in {current_year}"
-
-                        ucursor.updateRow(row)
-
-        if len(action_4_dict) > 0:
-
-            for action in action_4_dict:
-
-                project = action[0]
-                abb = action[1]
-
-                edits = action_4_dict[action]
-                new_directions = edits["NEW_DIRECTIONS"]
-                new_type1 = edits["NEW_TYPE1"]
-                new_type2 = edits["NEW_TYPE2"]
-                new_ampm1 = edits["NEW_AMPM1"]
-                new_ampm2 = edits["NEW_AMPM2"]
-                new_postedspeed1 = edits["NEW_POSTEDSPEED1"]
-                new_postedspeed2 = edits["NEW_POSTEDSPEED2"]
-                new_thrulanes1 = edits["NEW_THRULANES1"]
-                new_thrulanes2 = edits["NEW_THRULANES2"]
-                new_thrulanewidth1 = edits["NEW_THRULANEWIDTH1"]
-                new_thrulanewidth2 = edits["NEW_THRULANEWIDTH2"]
-                add_parklanes1 = edits["ADD_PARKLANES1"]
-                add_parklanes2 = edits["ADD_PARKLANES2"]
-                add_sigic = edits["ADD_SIGIC"]
-                add_cltl = edits["ADD_CLTL"]
-                add_rrgradecross = edits["ADD_RRGRADECROSS"]
-                new_tolldollars = edits["NEW_TOLLDOLLARS"]
-                new_modes = edits["NEW_MODES"]
-
-                where_clause = f"ABB = '{abb}'"
-                with arcpy.da.UpdateCursor(hwylink_fc, link_fields, where_clause) as ucursor:
-                    for row in ucursor:
-                        row[2] = new_directions
-                        row[3] = new_type1
-                        row[4] = new_type2
-                        row[5] = new_ampm1
-                        row[6] = new_ampm2
-                        row[7] = new_postedspeed1
-                        row[8] = new_postedspeed2
-                        row[9] = new_thrulanes1
-                        row[10] = new_thrulanes2
-                        row[11] = new_thrulanewidth1
-                        row[12] = new_thrulanewidth2
-                        row[13] = add_parklanes1
-                        row[14] = add_parklanes2
-                        row[17] = add_sigic
-                        row[18] = add_cltl
-                        row[19] = add_rrgradecross
-                        row[21] = new_tolldollars
-                        row[22] = new_modes
-
-                        row[35] = "1"
-                        row[36] = project
-                        row[37] = f"Added in {current_year}"
-
-                        ucursor.updateRow(row)
-
-                # if added can't be replaced
-                where_clause = "USE = 1 "
-                where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
-                where_clause += "AND ACTION_CODE = '2'"
-                with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
-                    for row in ucursor:
-
-                        row[26] = 0
-                        row[27] = f"Added in {current_year}"
-                        ucursor.updateRow(row)
-
-                # if added can't be added again 
-                where_clause = "USE = 1 "
-                where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
-                where_clause += "AND ACTION_CODE = '4'"
-                with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
-                    for row in ucursor:
-
-                        row[1] = "1"
-                        
-                        row[2] = "0" if row[2] == new_directions else row[2]
-                        row[3] = "0" if row[3] == new_type1 else row[3]
-                        row[4] = "0" if row[4] == new_type2 else row[4]
-                        row[5] = "0" if row[5] == new_ampm1 else row[5]
-                        row[6] = "0" if row[6] == new_ampm2 else row[6]
-                        row[7] = 0 if row[7] == new_postedspeed1 else row[7]
-                        row[8] = 0 if row[8] == new_postedspeed2 else row[8]
-                        row[9] = 0 if row[9] == new_thrulanes1 else row[9]
-                        row[10] = 0 if row[10] == new_thrulanes2 else row[10]
-                        row[11] = 0 if row[11] == new_thrulanewidth1 else row[11]
-                        row[12] = 0 if row[12] == new_thrulanewidth2 else row[12]
-                        row[13] = row[13] - add_parklanes1
-                        row[14] = row[14] - add_parklanes2
-                        row[15] = 0 if row[15] == add_sigic else row[15]
-                        row[16] = 0 if row[16] == add_cltl else row[16]
-                        row[17] = 0 if row[17] == add_rrgradecross else row[17]
-                        row[18] = 0 if row[18] == new_tolldollars else row[18]
-                        row[19] = "0" if row[19] == new_modes else row[19]
-
-                        row[27] = f"Added in {current_year}"
-                        ucursor.updateRow(row)
-        
-        # set use on all projects completed this year to 0 
-        where_clause = f"COMPLETION_YEAR = {current_year}"
-        with arcpy.da.UpdateCursor(hwyproj_table, ["USE", "PROCESS_NOTES"], where_clause) as ucursor:
-            for row in ucursor:
-                row[0] = 0
-                row[1] = f"Completed in {current_year}"
-
-                ucursor.updateRow(row)
-
-        self.base_year = current_year
-
-    # function that builds future highways
+    # method that builds future highways
     def build_future_hwys(self, subset = False, build_years = None):
 
         mhn_out_folder = self.mhn_out_folder
@@ -1618,7 +949,7 @@ class HighwayNetwork:
 
         print("All years built.\n")
 
-    # function that cleans up the output gdbs 
+    # method that cleans up the output gdbs 
     def finalize_hwy_data(self):
 
         print("Finalizing highway data...")
@@ -1774,6 +1105,754 @@ class HighwayNetwork:
 
         print("Highway data finalized.\n")
 
+    # HELPER METHODS ------------------------------------------------------------------------------
+
+    # helper method to get fields 
+    def get_hwy_fields(self):
+
+        hwylink = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
+        link_fields = [f.name for f in arcpy.ListFields(hwylink) if (f.type!="Geometry" and f.name != "OBJECTID")]
+        lf_dict = {field: index for index, field in enumerate(link_fields)}
+
+        hwyproj = os.path.join(self.current_gdb, "hwyproj_coding")
+        proj_fields = [f.name for f in arcpy.ListFields(hwyproj) if f.name != "OBJECTID"]
+        pf_dict = {field: index for index, field in enumerate(proj_fields)}
+
+        return link_fields, lf_dict, proj_fields, pf_dict
+    
+    # helper method to get dfs 
+    def get_hwy_dfs(self):
+
+        link_fields, lf_dict, proj_fields, pf_dict = self.get_hwy_fields()
+
+        hwylink = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
+        self.hwylink_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(hwylink, link_fields)], 
+            columns = link_fields)
+        
+        hwynode = os.path.join(self.current_gdb, "hwynet/hwynet_node")
+        hwynode_fields = [f.name for f in arcpy.ListFields(hwynode) if (f.type!="Geometry" and f.name != "OBJECTID")]
+        self.hwynode_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(hwynode, hwynode_fields)], 
+            columns = hwynode_fields)
+
+        hwyproj = os.path.join(self.current_gdb, "hwyproj_coding")
+        self.hwyproj_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(hwyproj, proj_fields)], 
+            columns = proj_fields)
+        
+        hwyproj_years = os.path.join(self.current_gdb, "hwynet/hwyproj")
+        hwyproj_years_fields = [f.name for f in arcpy.ListFields(hwyproj_years) if (f.type!="Geometry" and f.name != "OBJECTID")]
+        self.hwyproj_years_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(hwyproj_years, hwyproj_years_fields)],
+            columns = hwyproj_years_fields)
+        
+    # helper method to delete relationship classes
+    def del_rcs(self):
+
+        for rc in self.rel_classes:
+
+            rc_path = os.path.join(self.current_gdb, rc)
+            if arcpy.Exists(rc_path):
+                arcpy.management.Delete(rc_path)
+
+    # helper method that copies a gdb
+    def copy_gdb_safe(self, input_gdb, output_gdb):
+        while True:
+            try: 
+                if arcpy.Exists(output_gdb):
+                    arcpy.management.Delete(output_gdb)
+                
+                arcpy.management.Copy(input_gdb, output_gdb)
+            except:
+                print("Copying GDB failed. Trying again...")
+                pass
+            else:
+                break
+
+    # helper method that subsets to certain projects
+    def subset_to_projects(self):
+
+        print("Subsetting to projects...")
+
+        mhn_in_folder = self.mhn_in_folder
+        subset_hwy_path = os.path.join(mhn_in_folder, "subset_hwy_projects.csv")
+
+        subset_df = pd.read_csv(subset_hwy_path).drop_duplicates()
+        subset_df["TIPID"] = subset_df["TIPID"].astype("string")
+
+        all_tipid_list = subset_df[subset_df.ABB == "all"].TIPID.to_list()
+        spec_abb_list = list(subset_df[subset_df.ABB != "all"].set_index(["TIPID", "ABB"]).index.values)
+
+        hwyproj_coding_table = os.path.join(self.current_gdb, "hwyproj_coding")
+
+        fields = ["TIPID", "ABB", "USE"]
+
+        with arcpy.da.UpdateCursor(hwyproj_coding_table, fields) as ucursor:
+            for row in ucursor:
+
+                tipid = row[0]
+                abb = row[1]
+
+                tipid_abb = (tipid, abb)
+                
+                if tipid not in all_tipid_list and tipid_abb not in spec_abb_list:
+                    row[2] = 0
+                    ucursor.updateRow(row)
+
+        print("Subset complete.\n")
+
+    # helper method that copies highway links into the combined gdb
+    def copy_hwy_links(self):
+
+        mhn_out_folder = self.mhn_out_folder
+        mhn_all_name = "MHN_all.gdb"
+        mhn_all_gdb = os.path.join(mhn_out_folder, mhn_all_name)
+
+        hwylink = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
+        link_workspace = os.path.join(mhn_all_gdb, "hwylinks_all")
+
+        base_links_name = f"HWYLINK_{self.base_year}"
+        arcpy.management.CreateFeatureclass(link_workspace, base_links_name, template = hwylink, spatial_reference = 26771)
+        base_links = os.path.join(link_workspace, base_links_name)
+
+        hwylink_fields = [f.name for f in arcpy.ListFields(hwylink) if f.name != "OBJECTID" and f.type != "Geometry"]
+        hwylink_fields += ["SHAPE@"]
+
+        with arcpy.da.SearchCursor(hwylink, hwylink_fields) as scursor:
+            with arcpy.da.InsertCursor(base_links, hwylink_fields) as icursor:
+
+                for row in scursor:
+                    icursor.insertRow(row)
+
+    # helper method that creates a gdb of all built years 
+    def create_combined_gdb(self):
+
+        print("Creating combined gdb...")
+
+        final_year = max(self.years_list)
+        mhn_out_folder = self.mhn_out_folder
+
+        # create a combined gdb to store + check final output 
+        mhn_all_name = "MHN_all.gdb"
+        mhn_all_gdb = os.path.join(mhn_out_folder, mhn_all_name)
+        arcpy.management.CreateFileGDB(mhn_out_folder, mhn_all_name)
+
+        # make an fc of the projects which will be applied 
+        arcpy.management.CreateFeatureclass(mhn_all_gdb, "hwyproj_applied", "POLYLINE", spatial_reference = 26771)
+        hwyproj_applied = os.path.join(mhn_all_gdb, "hwyproj_applied")
+
+        hwyproj = os.path.join(self.current_gdb, "hwyproj_coding")
+        hwyproj_fields = [[f.name, f.type] for f in arcpy.ListFields(hwyproj) if (f.name != "OBJECTID")]
+        hwyproj_fields_2 = [f.name for f in arcpy.ListFields(hwyproj) if (f.name != ("OBJECTID"))]
+
+        arcpy.management.AddFields(hwyproj_applied, hwyproj_fields)
+
+        where_clause = f"USE = 1 AND COMPLETION_YEAR <= {final_year}"
+        with arcpy.da.SearchCursor(hwyproj, hwyproj_fields_2, where_clause) as scursor:
+            with arcpy.da.InsertCursor(hwyproj_applied, hwyproj_fields_2) as icursor:
+
+                for row in scursor:
+                    icursor.insertRow(row)
+
+        geom_fields = ["SHAPE@", "ABB"]
+        hwylink = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
+        
+        with arcpy.da.UpdateCursor(hwyproj_applied, geom_fields) as ucursor:
+            for u_row in ucursor:
+
+                abb = u_row[1]
+
+                geom = None
+                where_clause = f"ABB = '{abb}'"
+
+                with arcpy.da.SearchCursor(hwylink, geom_fields, where_clause) as scursor:
+                    for s_row in scursor:
+
+                        geom = s_row[0]
+
+                ucursor.updateRow([geom, abb])
+
+        # make an fc of the links which had multiple updates 
+        hwyproj_multiple = os.path.join(mhn_all_gdb, "hwyproj_multiple")
+        arcpy.management.Sort(hwyproj_applied, hwyproj_multiple, "COMPLETION_YEAR")
+
+        hwyproj_df = self.hwyproj_df
+        hwyproj_df_use = hwyproj_df[(hwyproj_df.USE == 1) & (hwyproj_df.COMPLETION_YEAR <= final_year)]
+        hwyproj_multiple_dict = hwyproj_df_use.ABB.value_counts()[hwyproj_df_use.ABB.value_counts() >= 2].to_dict()
+
+        with arcpy.da.UpdateCursor(hwyproj_multiple, "ABB") as ucursor:
+            for row in ucursor:
+
+                if row[0] not in hwyproj_multiple_dict:
+                    ucursor.deleteRow()
+
+        # copy the nodes 
+        hwynode = os.path.join(self.current_gdb, "hwynet/hwynet_node")
+        arcpy.management.CreateFeatureclass(mhn_all_gdb, "hwynode_all", template = hwynode, spatial_reference = 26771)
+        hwynode_all = os.path.join(mhn_all_gdb, "hwynode_all")
+        hwynode_fields = [f.name for f in arcpy.ListFields(hwynode) if f.name != "OBJECTID" and f.type != "Geometry"]
+        hwynode_fields += ["SHAPE@XY"]
+
+        with arcpy.da.SearchCursor(hwynode, hwynode_fields) as scursor:
+            with arcpy.da.InsertCursor(hwynode_all, hwynode_fields) as icursor:
+
+                for row in scursor:
+                    icursor.insertRow(row)
+
+        # create a feature dataset to store the links 
+        # then copy over the base links
+        arcpy.management.CreateFeatureDataset(mhn_all_gdb, "hwylinks_all", spatial_reference = 26771)
+        self.copy_hwy_links()
+        
+        print("Combined gdb created.\n")
+
+    # helper method that moves the base year up one year
+    def hwy_forward_one_year(self):
+        
+        current_year = self.base_year + 1 
+
+        self.get_hwy_dfs()
+        hwyproj_df = self.hwyproj_df[self.hwyproj_df.USE == 1] # Only want the valid projects
+
+        year_projects = hwyproj_df[hwyproj_df.COMPLETION_YEAR == current_year]
+        year_projects = year_projects.set_index(["TIPID", "ABB"]).drop(columns = ["USE", "PROCESS_NOTES"])
+        action_1_dict = year_projects[year_projects.ACTION_CODE == "1"].to_dict("index")
+        action_2_dict = year_projects[year_projects.ACTION_CODE == "2"].to_dict("index")
+        action_3_dict = year_projects[year_projects.ACTION_CODE == "3"].to_dict("index")
+        action_4_dict = year_projects[year_projects.ACTION_CODE == "4"].to_dict("index")
+
+        # these fields will change
+        hwylink_fc = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
+        hwyproj_table = os.path.join(self.current_gdb, "hwyproj_coding")
+
+        link_fields, lf_dict, proj_fields, pf_dict = self.get_hwy_fields()
+
+        # get indices of the highway link fields
+        dirs_pos = lf_dict["DIRECTIONS"]
+        type1_pos = lf_dict["TYPE1"]
+        type2_pos = lf_dict["TYPE2"]
+        ampm1_pos = lf_dict["AMPM1"]
+        ampm2_pos = lf_dict["AMPM2"]
+        speed1_pos = lf_dict["POSTEDSPEED1"]
+        speed2_pos = lf_dict["POSTEDSPEED2"]
+        lanes1_pos = lf_dict["THRULANES1"]
+        lanes2_pos = lf_dict["THRULANES2"]
+        feet1_pos = lf_dict["THRULANEWIDTH1"]
+        feet2_pos = lf_dict["THRULANEWIDTH2"]
+        park1_pos = lf_dict["PARKLANES1"]
+        park2_pos = lf_dict["PARKLANES2"]
+        parkres1_pos = lf_dict["PARKRES1"]
+        parkres2_pos = lf_dict["PARKRES2"]
+        sigic_pos = lf_dict["SIGIC"]
+        cltl_pos = lf_dict["CLTL"]
+        rr_pos = lf_dict["RRGRADECROSS"]
+        toll_pos = lf_dict["TOLLDOLLARS"]
+        modes_pos = lf_dict["MODES"]
+        new_baselink_pos = lf_dict["NEW_BASELINK"]
+        proj_pos = lf_dict["PROJECT"]
+        desc_pos = lf_dict["DESCRIPTION"]
+
+        # get indices of the project coding fields
+        action_pos = pf_dict["ACTION_CODE"]
+        new_dirs_pos = pf_dict["NEW_DIRECTIONS"]
+        new_type1_pos = pf_dict["NEW_TYPE1"]
+        new_type2_pos = pf_dict["NEW_TYPE2"]
+        new_ampm1_pos = pf_dict["NEW_AMPM1"]
+        new_ampm2_pos = pf_dict["NEW_AMPM2"]
+        new_speed1_pos = pf_dict["NEW_POSTEDSPEED1"]
+        new_speed2_pos = pf_dict["NEW_POSTEDSPEED2"]
+        new_lanes1_pos = pf_dict["NEW_THRULANES1"]
+        new_lanes2_pos = pf_dict["NEW_THRULANES2"]
+        new_feet1_pos = pf_dict["NEW_THRULANEWIDTH1"]
+        new_feet2_pos = pf_dict["NEW_THRULANEWIDTH2"]
+        add_park1_pos = pf_dict["ADD_PARKLANES1"]
+        add_park2_pos = pf_dict["ADD_PARKLANES2"]
+        add_sigic_pos = pf_dict["ADD_SIGIC"]
+        add_cltl_pos = pf_dict["ADD_CLTL"]
+        add_rr_pos = pf_dict["ADD_RRGRADECROSS"]
+        new_toll_pos = pf_dict["NEW_TOLLDOLLARS"]
+        new_modes_pos = pf_dict["NEW_MODES"]
+        rep_anode_pos = pf_dict["REP_ANODE"]
+        rep_bnode_pos = pf_dict["REP_BNODE"]
+        use_pos = pf_dict["USE"]
+        notes_pos = pf_dict["PROCESS_NOTES"]
+
+        if len(action_1_dict) > 0:
+
+            for action in action_1_dict:
+
+                project = action[0]
+                abb = action[1]
+
+                edits = action_1_dict[action]
+                new_dirs = edits["NEW_DIRECTIONS"]
+                new_type1 = edits["NEW_TYPE1"]
+                new_type2 = edits["NEW_TYPE2"]
+                new_ampm1 = edits["NEW_AMPM1"]
+                new_ampm2 = edits["NEW_AMPM2"]
+                new_speed1 = edits["NEW_POSTEDSPEED1"]
+                new_speed2 = edits["NEW_POSTEDSPEED2"]
+                new_lanes1 = edits["NEW_THRULANES1"]
+                new_lanes2 = edits["NEW_THRULANES2"]
+                new_feet1 = edits["NEW_THRULANEWIDTH1"]
+                new_feet2 = edits["NEW_THRULANEWIDTH2"]
+                add_park1 = edits["ADD_PARKLANES1"]
+                add_park2 = edits["ADD_PARKLANES2"]
+                add_sigic = edits["ADD_SIGIC"]
+                add_cltl = edits["ADD_CLTL"]
+                add_rr = edits["ADD_RRGRADECROSS"]
+                new_toll = edits["NEW_TOLLDOLLARS"]
+                new_modes = edits["NEW_MODES"]
+
+                where_clause = f"ABB = '{abb}'"
+                with arcpy.da.UpdateCursor(hwylink_fc, link_fields, where_clause) as ucursor:
+                    for row in ucursor:
+
+                        row[dirs_pos] = new_dirs if new_dirs != "0" else row[dirs_pos]
+                        row[type1_pos] = new_type1 if new_type1 != "0" else row[type1_pos]
+                        row[type2_pos] = new_type2 if new_type2 != "0" else row[type2_pos]
+                        row[ampm1_pos] = new_ampm1 if new_ampm1 != "0" else row[ampm1_pos]
+                        row[ampm2_pos] = new_ampm2 if new_ampm2 != "0" else row[ampm2_pos]
+                        row[speed1_pos] = new_speed1 if new_speed1 != 0 else row[speed1_pos]
+                        row[speed2_pos] = new_speed2 if new_speed2 != 0 else row[speed2_pos]
+                        row[lanes1_pos] = new_lanes1 if new_lanes1 != 0 else row[lanes1_pos]
+                        row[lanes2_pos] = new_lanes2 if new_lanes2 != 0 else row[lanes2_pos]
+                        row[feet1_pos] = new_feet1 if new_feet1 != 0 else row[feet1_pos]
+                        row[feet2_pos] = new_feet2 if new_feet2 != 0 else row[feet2_pos]
+                        row[park1_pos] = max((row[park1_pos] + add_park1), 0)
+                        row[park2_pos] = max((row[park2_pos] + add_park2), 0)
+                        row[sigic_pos] = min(max((row[sigic_pos] + add_sigic), 0), 1)
+                        row[cltl_pos] = min(max((row[cltl_pos] + add_cltl), 0), 1)
+                        row[rr_pos] = min(max((row[rr_pos] + add_rr), 0), 1)
+                        row[toll_pos] = new_toll if new_toll != 0 else row[toll_pos]
+                        row[modes_pos] = new_modes if new_modes != "0" else row[modes_pos]
+                        row[proj_pos] = project
+                        row[desc_pos] = f"Modified in {current_year}"
+
+                        # if directions = 1 or 2
+                        # empty all "2" fields
+                        if row[dirs_pos] in ["1", "2"]:
+                            row[type2_pos] = "0"
+                            row[ampm2_pos] = "0"
+                            row[speed2_pos] = 0
+                            row[lanes2_pos] = 0
+                            row[feet2_pos] = 0
+                            row[park2_pos] = 0
+                        
+                        if row[dirs_pos] == "1":
+                            row[parkres2_pos] = ""
+
+                        ucursor.updateRow(row)
+
+                where_clause = "USE = 1 "
+                where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
+                where_clause += "AND ACTION_CODE = '1'"
+
+                # if modified and modified again
+                with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
+                    for row in ucursor:
+
+                        row[new_dirs_pos] = "0" if row[new_dirs_pos] == new_dirs else row[new_dirs_pos]
+                        row[new_type1_pos] = "0" if row[new_type1_pos] == new_type1 else row[new_type1_pos]
+                        row[new_type2_pos] = "0" if row[new_type2_pos] == new_type2 else row[new_type2_pos]
+                        row[new_ampm1_pos] = "0" if row[new_ampm1_pos] == new_ampm1 else row[new_ampm1_pos]
+                        row[new_ampm2_pos] = "0" if row[new_ampm2_pos] == new_ampm2 else row[new_ampm2_pos]
+                        row[new_speed1_pos] = 0 if row[new_speed1_pos] == new_speed1 else row[new_speed1_pos]
+                        row[new_speed2_pos] = 0 if row[new_speed2_pos] == new_speed2 else row[new_speed2_pos]
+                        row[new_lanes1_pos] = 0 if row[new_lanes1_pos] == new_lanes1 else row[new_lanes1_pos]
+                        row[new_lanes2_pos] = 0 if row[new_lanes2_pos] == new_lanes2 else row[new_lanes2_pos]
+                        row[new_feet1_pos] = 0 if row[new_feet1_pos] == new_feet1 else row[new_feet1_pos]
+                        row[new_feet2_pos] = 0 if row[new_feet2_pos] == new_feet2 else row[new_feet2_pos]
+                        row[add_park1_pos] = row[add_park1_pos] - add_park1 if row[add_park1_pos] != 0 else 0
+                        row[add_park2_pos] = row[add_park2_pos] - add_park2 if row[add_park2_pos] != 0 else 0
+                        row[add_sigic_pos] = 0 if row[add_sigic_pos] == add_sigic else row[add_sigic_pos]
+                        row[add_cltl_pos] = 0 if row[add_cltl_pos] == add_cltl else row[add_cltl_pos]
+                        row[add_rr_pos] = 0 if row[add_rr_pos] == add_rr else row[add_rr_pos]
+                        row[new_toll_pos] = 0 if row[new_toll_pos] == new_toll else row[new_toll_pos]
+                        row[new_modes_pos] = "0" if row[new_modes_pos] == new_modes else row[new_modes_pos]
+
+                        row[notes_pos] = f"Modified in {current_year}"
+                        ucursor.updateRow(row)
+
+                # if modified and deleted- no impact
+                where_clause = "USE = 1 "
+                where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
+                where_clause += "AND ACTION_CODE = '3'"
+
+                spec_fields = ["PROCESS_NOTES"]
+                with arcpy.da.UpdateCursor(hwyproj_table, spec_fields, where_clause) as ucursor:
+                    for row in ucursor:
+
+                        row[0] = f"Modified in {current_year}"
+                        ucursor.updateRow(row)
+  
+        if len(action_2_dict) > 0:
+            
+            # invert action_2_dict
+
+            inverted_2_dict = {}
+            for action in action_2_dict:
+
+                project = action[0]
+                abb = action[1]
+                edits = action_2_dict[action]
+                rep_abb = edits["REP_ABB"]
+
+                if (project, rep_abb) not in inverted_2_dict:
+                    inverted_2_dict[(project, rep_abb)] = [abb]
+                else:
+                    inverted_2_dict[(project, rep_abb)].append(abb)
+                
+            for action in inverted_2_dict:
+
+                project = action[0]
+                rep_abb = action[1]
+                abb_list = inverted_2_dict[action]
+                abb_list_string = [f"'{abb}'" for abb in abb_list]
+                abb_string = ", ".join(abb_list_string)
+
+                dirs = "0"
+                type1 = "0"
+                type2 = "0"
+                ampm1 = "0"
+                ampm2 = "0"
+                speed1 = 0 
+                speed2 = 0
+                lanes1 = 0
+                lanes2 = 0
+                feet1 = 0
+                feet2 = 0
+                park1 = 0
+                park2 = 0
+                sigic = 0
+                cltl = 0
+                rr = 0
+                toll = 0
+                modes = "0"
+
+                s_where_clause = f"ABB = '{rep_abb}'"
+                u_where_clause = f"ABB in ({abb_string})"
+
+                # get the attributes from the regular link
+                with arcpy.da.SearchCursor(hwylink_fc, link_fields, s_where_clause) as scursor:
+                    for row in scursor:
+                        dirs = row[dirs_pos]
+                        type1 = row[type1_pos]
+                        type2 = row[type2_pos]
+                        ampm1 = row[ampm1_pos]
+                        ampm2 = row[ampm2_pos]
+                        speed1 = row[speed1_pos]
+                        speed2 = row[speed2_pos]
+                        lanes1 = row[lanes1_pos]
+                        lanes2 = row[lanes2_pos]
+                        feet1 = row[feet1_pos]
+                        feet2 = row[feet2_pos]
+                        park1 = row[park1_pos]
+                        park2 = row[park2_pos]
+                        sigic = row[sigic_pos]
+                        cltl = row[cltl_pos]
+                        rr = row[rr_pos]
+                        toll = row[toll_pos]
+                        modes = row[modes_pos]
+
+                # and give them to the skeleton link
+                with arcpy.da.UpdateCursor(hwylink_fc, link_fields, u_where_clause) as ucursor:
+                    for row in ucursor:
+
+                        row[dirs_pos] = dirs
+                        row[type1_pos] = type1
+                        row[type2_pos] = type2
+                        row[ampm1_pos] = ampm1
+                        row[ampm2_pos] = ampm2
+                        row[speed1_pos] = speed1 
+                        row[speed2_pos] = speed2
+                        row[lanes1_pos] = lanes1
+                        row[lanes2_pos] = lanes2
+                        row[feet1_pos] = feet1
+                        row[feet2_pos] = feet2
+                        row[park1_pos] = park1
+                        row[park2_pos] = park2
+                        row[sigic_pos] = sigic
+                        row[cltl_pos] = cltl
+                        row[rr_pos] = rr
+                        row[toll_pos] = toll
+                        row[modes_pos] = modes
+
+                        row[new_baselink_pos] = "1"
+                        row[proj_pos] = project
+                        row[desc_pos] = f"Replaced {rep_abb} in {current_year}"
+                        ucursor.updateRow(row)
+
+                for abb in abb_list:
+
+                    # if you replaced a link once, you can't replace it again
+                    where_clause = "USE = 1 "
+                    where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
+                    where_clause += "AND ACTION_CODE = '2'"
+
+                    spec_fields = ["USE", "PROCESS_NOTES"]
+                    
+                    with arcpy.da.UpdateCursor(hwyproj_table, spec_fields, where_clause) as ucursor:
+                        for row in ucursor: 
+
+                            row[0] = 0
+                            row[1] = f"Replaced {rep_abb} in {current_year}"
+
+                            ucursor.updateRow(row)
+
+                    # if you replaced a link, you can't add it again - only modify
+                    where_clause = "USE = 1 "
+                    where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
+                    where_clause += "AND ACTION_CODE = '4'"
+
+                    with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
+                        for row in ucursor: 
+
+                            row[action_pos] = "1" # becomes modify
+
+                            row[new_dirs_pos] = 0 if row[new_dirs_pos] == dirs else row[new_dirs_pos]
+                            row[new_type1_pos] = 0 if row[new_type1_pos] == type1 else row[new_type1_pos]
+                            row[new_type2_pos] = 0 if row[new_type2_pos] == type2 else row[new_type2_pos]
+                            row[new_ampm1_pos] = 0 if row[new_ampm1_pos] == ampm1 else row[new_ampm1_pos]
+                            row[new_ampm2_pos] = 0 if row[new_ampm2_pos] == ampm2 else row[new_ampm2_pos]
+                            row[new_speed1_pos] = 0 if row[new_speed1_pos] == speed1 else row[new_speed1_pos]
+                            row[new_speed2_pos] = 0 if row[new_speed2_pos] == speed2 else row[new_speed2_pos]
+                            row[new_lanes1_pos] = 0 if row[new_lanes1_pos] == lanes1 else row[new_lanes1_pos]
+                            row[new_lanes2_pos] = 0 if row[new_lanes2_pos] == lanes2 else row[new_lanes2_pos]
+                            row[new_feet1_pos] = 0 if row[new_feet1_pos] == feet1 else row[new_feet1_pos]
+                            row[new_feet2_pos] = 0 if row[new_feet2_pos] == feet2 else row[new_feet2_pos]
+                            row[add_park1_pos] = row[add_park1_pos] - park1 if row[add_park1_pos] != 0 else 0
+                            row[add_park2_pos] = row[add_park2_pos] - park2 if row[add_park2_pos] != 0 else 0
+                            row[add_sigic_pos] = 0 if row[add_sigic_pos] == sigic else row[add_sigic_pos]
+                            row[add_cltl_pos] = 0 if row[add_cltl_pos] == cltl else row[add_cltl_pos]
+                            row[add_rr_pos] = 0 if row[add_rr_pos] == rr else row[add_rr_pos]
+                            row[new_toll_pos] = 0 if row[new_toll_pos] == toll else row[new_toll_pos]
+                            row[new_modes_pos] = 0 if row[new_modes_pos] == modes else row[new_modes_pos]
+          
+                            row[notes_pos] = f"Replaced {rep_abb} in {current_year}"
+
+                            ucursor.updateRow(row)
+
+        if len(action_3_dict) > 0:
+            
+            for action in action_3_dict:
+
+                project = action[0]
+                abb = action[1]
+
+                dirs = "0"
+                type1 = "0"
+                type2 = "0"
+                ampm1 = "0"
+                ampm2 = "0"
+                speed1 = 0 
+                speed2 = 0
+                lanes1 = 0
+                lanes2 = 0
+                feet1 = 0
+                feet2 = 0
+                park1 = 0
+                park2 = 0
+                sigic = 0
+                cltl = 0
+                rr = 0
+                toll = 0
+                modes = "0"
+
+                # set to skeleton link but get attributes
+                where_clause = f"ABB = '{abb}'"
+                with arcpy.da.UpdateCursor(hwylink_fc, link_fields, where_clause) as ucursor:
+                    for row in ucursor:
+
+                        dirs = row[dirs_pos]
+                        type1 = row[type1_pos]
+                        type2 = row[type2_pos]
+                        ampm1 = row[ampm1_pos]
+                        ampm2 = row[ampm2_pos]
+                        speed1 = row[speed1_pos]
+                        speed2 = row[speed2_pos]
+                        lanes1 = row[lanes1_pos]
+                        lanes2 = row[lanes2_pos]
+                        feet1 = row[feet1_pos]
+                        feet2 = row[feet2_pos]
+                        park1 = row[park1_pos]
+                        park2 = row[park2_pos]
+                        sigic = row[sigic_pos]
+                        cltl = row[cltl_pos]
+                        rr = row[rr_pos]
+                        toll = row[toll_pos]
+                        modes = row[modes_pos]
+
+                        row[new_baselink_pos] = "0"
+                        row[proj_pos] = project
+                        row[desc_pos] = f"Deleted in {current_year}"
+
+                        ucursor.updateRow(row)
+
+                # if a link is deleted, it cannot be modified or deleted again
+                where_clause = "USE = 1 "
+                where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
+                where_clause += "AND ACTION_CODE in ('1', '3')"
+
+                spec_fields = ["USE", "PROCESS_NOTES"]
+
+                with arcpy.da.UpdateCursor(hwyproj_table, spec_fields, where_clause) as ucursor:
+                    for row in ucursor:
+                        row[0] = 0 
+                        row[1] = f"Deleted in {current_year}"
+
+                        ucursor.updateRow(row)
+
+                where_clause = "USE = 1 "
+                where_clause += f"AND REP_ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
+                where_clause += "AND ACTION_CODE = '2'"
+
+                # if a link is deleted
+                # a skeleton that replaces it, is now added 
+                with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
+                    for row in ucursor:
+
+                        row[action_pos] = "4" # becomes add 
+
+                        row[new_dirs_pos] = dirs
+                        row[new_type1_pos] = type1
+                        row[new_type2_pos] = type2
+                        row[new_ampm1_pos] = ampm1
+                        row[new_ampm2_pos] = ampm2
+                        row[new_speed1_pos] = speed1
+                        row[new_speed2_pos] = speed2
+                        row[new_lanes1_pos] = lanes1
+                        row[new_lanes2_pos] = lanes2
+                        row[new_feet1_pos] = feet1
+                        row[new_feet2_pos] = feet2
+                        row[add_park1_pos] = park1
+                        row[add_park2_pos] = park2
+                        row[add_sigic_pos] = sigic
+                        row[add_cltl_pos] = cltl
+                        row[add_rr_pos] = rr
+                        row[new_toll_pos] = toll
+                        row[new_modes_pos] = modes
+                        
+                        row[rep_anode_pos] = 0 # rep_anode = 0
+                        row[rep_bnode_pos] = 0 # rep_bnode = 0
+
+                        row[notes_pos] = f"Deleted replacement link in {current_year}"
+
+                        ucursor.updateRow(row)
+
+        if len(action_4_dict) > 0:
+
+            for action in action_4_dict:
+
+                project = action[0]
+                abb = action[1]
+
+                edits = action_4_dict[action]
+                new_dirs = edits["NEW_DIRECTIONS"]
+                new_type1 = edits["NEW_TYPE1"]
+                new_type2 = edits["NEW_TYPE2"]
+                new_ampm1 = edits["NEW_AMPM1"]
+                new_ampm2 = edits["NEW_AMPM2"]
+                new_speed1 = edits["NEW_POSTEDSPEED1"]
+                new_speed2 = edits["NEW_POSTEDSPEED2"]
+                new_lanes1 = edits["NEW_THRULANES1"]
+                new_lanes2 = edits["NEW_THRULANES2"]
+                new_feet1 = edits["NEW_THRULANEWIDTH1"]
+                new_feet2 = edits["NEW_THRULANEWIDTH2"]
+                add_park1 = edits["ADD_PARKLANES1"]
+                add_park2 = edits["ADD_PARKLANES2"]
+                add_sigic = edits["ADD_SIGIC"]
+                add_cltl = edits["ADD_CLTL"]
+                add_rr = edits["ADD_RRGRADECROSS"]
+                new_toll = edits["NEW_TOLLDOLLARS"]
+                new_modes = edits["NEW_MODES"]
+
+                where_clause = f"ABB = '{abb}'"
+                with arcpy.da.UpdateCursor(hwylink_fc, link_fields, where_clause) as ucursor:
+                    for row in ucursor:
+                        row[dirs_pos] = new_dirs
+                        row[type1_pos] = new_type1
+                        row[type2_pos] = new_type2
+                        row[ampm1_pos] = new_ampm1
+                        row[ampm2_pos] = new_ampm2
+                        row[speed1_pos] = new_speed1
+                        row[speed2_pos] = new_speed2
+                        row[lanes1_pos] = new_lanes1
+                        row[lanes2_pos] = new_lanes2
+                        row[feet1_pos] = new_feet1
+                        row[feet2_pos] = new_feet2
+                        row[park1_pos] = add_park1
+                        row[park2_pos] = add_park2
+                        row[sigic_pos] = add_sigic
+                        row[cltl_pos] = add_cltl
+                        row[rr_pos] = add_rr
+                        row[toll_pos] = new_toll
+                        row[modes_pos] = new_modes
+
+                        row[new_baselink_pos] = "1"
+                        row[proj_pos] = project
+                        row[desc_pos] = f"Added in {current_year}"
+
+                        ucursor.updateRow(row)
+
+                # if added can't be replaced
+                where_clause = "USE = 1 "
+                where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
+                where_clause += "AND ACTION_CODE = '2'"
+
+                spec_fields = ["USE", "PROCESS_NOTES"]
+                with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
+                    for row in ucursor:
+
+                        row[0] = 0
+                        row[1] = f"Added in {current_year}"
+                        ucursor.updateRow(row)
+
+                # if added can't be added again 
+                where_clause = "USE = 1 "
+                where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
+                where_clause += "AND ACTION_CODE = '4'"
+                with arcpy.da.UpdateCursor(hwyproj_table, proj_fields, where_clause) as ucursor:
+                    for row in ucursor:
+
+                        row[action_pos] = "1" # becomes modify
+                        
+                        row[new_dirs_pos] = "0" if row[new_dirs_pos] == new_dirs else row[new_dirs_pos]
+                        row[new_type1_pos] = "0" if row[new_type1_pos] == new_type1 else row[new_type1_pos]
+                        row[new_type2_pos] = "0" if row[new_type2_pos] == new_type2 else row[new_type2_pos]
+                        row[new_ampm1_pos] = "0" if row[new_ampm1_pos] == new_ampm1 else row[new_ampm1_pos]
+                        row[new_ampm2_pos] = "0" if row[new_ampm2_pos] == new_ampm2 else row[new_ampm2_pos]
+                        row[new_speed1_pos] = 0 if row[new_speed1_pos] == new_speed1 else row[new_speed1_pos]
+                        row[new_speed2_pos] = 0 if row[new_speed2_pos] == new_speed2 else row[new_speed2_pos]
+                        row[new_lanes1_pos] = 0 if row[new_lanes1_pos] == new_lanes1 else row[new_lanes1_pos]
+                        row[new_lanes2_pos] = 0 if row[new_lanes2_pos] == new_lanes2 else row[new_lanes2_pos]
+                        row[new_feet1_pos] = 0 if row[new_feet1_pos] == new_feet1 else row[new_feet1_pos]
+                        row[new_feet2_pos] = 0 if row[new_feet2_pos] == new_feet2 else row[new_feet2_pos]
+                        row[add_park1_pos] = row[add_park1_pos] - add_park1
+                        row[add_park2_pos] = row[add_park2_pos] - add_park2
+                        row[add_sigic_pos] = 0 if row[add_sigic_pos] == add_sigic else row[add_sigic_pos]
+                        row[add_cltl_pos] = 0 if row[add_cltl_pos] == add_cltl else row[add_cltl_pos]
+                        row[add_rr_pos] = 0 if row[add_rr_pos] == add_rr else row[add_rr_pos]
+                        row[new_toll_pos] = 0 if row[new_toll_pos] == new_toll else row[new_toll_pos]
+                        row[new_modes_pos] = "0" if row[new_modes_pos] == new_modes else row[new_modes_pos]
+
+                        row[notes_pos] = f"Added in {current_year}"
+                        ucursor.updateRow(row)
+
+        # set use on all projects completed this year to 0 
+        where_clause = f"COMPLETION_YEAR = {current_year}"
+        with arcpy.da.UpdateCursor(hwyproj_table, ["USE", "PROCESS_NOTES"], where_clause) as ucursor:
+            for row in ucursor:
+                row[0] = 0
+                row[1] = f"Completed in {current_year}"
+
+                ucursor.updateRow(row)
+
+        self.base_year = current_year
+
+# TESTING -----------------------------------------------------------------------------------------
+
 # main function for testing 
 if __name__ == "__main__":
 
@@ -1781,8 +1860,8 @@ if __name__ == "__main__":
 
     HN = HighwayNetwork()
     HN.generate_base_year()
-    HN.import_hwy_project_coding()
     HN.check_hwy_fcs()
+    HN.import_hwy_project_coding()
     HN.check_hwy_project_table()
 
     end_time = time.time()
