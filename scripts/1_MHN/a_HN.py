@@ -29,7 +29,7 @@ class HighwayNetwork:
         
         self.in_folder = os.path.join(mfhrn_path, "input")
         self.mhn_in_folder = os.path.join(self.in_folder, "1_MHN")
-        self.in_gdb = os.path.join(self.mhn_in_folder, "MHN.gdb")
+        self.mhn_in_gdb = os.path.join(self.mhn_in_folder, "MHN.gdb")
 
         self.mhn_out_folder = os.path.join(mfhrn_path, "output", "1_MHN")
         
@@ -73,7 +73,7 @@ class HighwayNetwork:
             "rel_nodes_to_parknride"
         ]
         
-        self.current_gdb = self.in_gdb # as right now we're in the input folder 
+        self.current_gdb = self.mhn_in_gdb # as right now we're in the input folder 
 
         self.hwylink_df = None
         self.hwynode_df = None
@@ -103,7 +103,7 @@ class HighwayNetwork:
         # delete output folder + recreate it 
         mhn_out_folder = self.mhn_out_folder
         out_folder = os.path.dirname(mhn_out_folder)
-        in_gdb = self.in_gdb
+        mhn_in_gdb = self.mhn_in_gdb
         base_year = self.base_year 
 
         if os.path.isdir(out_folder) == True:
@@ -114,7 +114,7 @@ class HighwayNetwork:
 
         # copy GDB
         out_gdb = os.path.join(mhn_out_folder, f"MHN_{base_year}.gdb")
-        self.copy_gdb_safe(in_gdb, out_gdb)
+        self.copy_gdb_safe(mhn_in_gdb, out_gdb)
         self.current_gdb = out_gdb # !!! update the HN's current gdb
 
         self.built_gdbs.append(self.current_gdb)
