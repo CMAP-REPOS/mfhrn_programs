@@ -4,6 +4,7 @@ input/input_years.csv
 input/1_MHN/MHN.gdb
 input/1_MHN/import_hwy_project_coding.xlsx
 input/1_MHN/subset_hwy_projects.csv
+input/3_MFN_Freight/*
 
 output/
 *__pycache__*
