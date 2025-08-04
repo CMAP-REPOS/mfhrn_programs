@@ -3,7 +3,6 @@
 ## Based on work by kcazzato
 ## Edited by ccai (2025)
 
-import math
 import os
 import shutil
 import sys
@@ -23,11 +22,11 @@ class FreightNetwork:
         
         # already exists
         out_folder = os.path.join(mfhrn_path, "output")
-        mhn_out_folder = os.path.join(out_folder, "1_MHN")
+        self.mhn_out_folder = os.path.join(out_folder, "1_MHN")
         self.mfn_out_folder = os.path.join(out_folder, "3_MFN_Freight")
 
-        self.mhn_gdb = os.path.join(mhn_out_folder, "MHN_all.gdb")
-        self.mfhn_gdb = os.path.join(self.mfn_out_folder, "MFHN_all.gdb")
+        self.mhn_all_gdb = os.path.join(self.mhn_out_folder, "MHN_all.gdb")
+        self.mfhn_all_gdb = os.path.join(self.mfn_out_folder, "MFHN_all.gdb")
 
     # MAIN METHODS --------------------------------------------------------------------------------
     
@@ -35,11 +34,15 @@ class FreightNetwork:
 
         print("Creating freight output folder...")
 
+        # search for mhn_all.gdb
+        mhn_all_gdb = self.mhn_all_gdb
+
+        if os.path.isdir(mhn_all_gdb) == False:
+            sys.exit("You need to get MHN_all.gdb first! Crashing program.")
+
         # delete freight output folder + recreate it 
         mfn_out_folder = self.mfn_out_folder
-
-        mhn_gdb = self.mhn_gdb
-        mfhn_gdb = self.mfhn_gdb
+        mfhn_all_gdb = self.mfhn_all_gdb
 
         if os.path.isdir(mfn_out_folder) == True:
             shutil.rmtree(mfn_out_folder)
@@ -47,16 +50,15 @@ class FreightNetwork:
         os.mkdir(mfn_out_folder)
 
         # copy GDB
-        self.copy_gdb_safe(mhn_gdb, mfhn_gdb)
-        self.current_gdb = mfhn_gdb
+        self.copy_gdb_safe(mhn_all_gdb, mfhn_all_gdb)
 
         print("Freight output folder created.\n")
 
-    def make_meso_override(self):
+    def make_override_meso(self):
 
         print("Making meso override file...")
 
-        arcpy.env.workspace = self.mfhn_gdb
+        arcpy.env.workspace = self.mfhn_all_gdb
 
         hwylink_list = arcpy.ListFeatureClasses(feature_dataset = "hwylinks_all")
         base_hwylink = hwylink_list[0]
@@ -102,11 +104,40 @@ class FreightNetwork:
         arcpy.management.AddFields("meso_buffer", [["USE", "SHORT"], ["YEAR", "SHORT"]])
         arcpy.management.CalculateField("meso_buffer", "USE", "1")
 
-        meso_override_folder = os.path.join(self.mfn_out_folder, "meso_override")
-        os.mkdir(meso_override_folder)
+        # find any issues with the override file
+        override_file_creation_errors = os.path.join(
+            self.mfn_out_folder, 
+            "override_file_creation_errors.txt")
+        
+        arcpy.management.MakeFeatureLayer(base_hwylink, "all_links")
+        arcpy.management.MakeFeatureLayer("meso_buffer", "meso_buffer_layer")
+        arcpy.management.SelectLayerByLocation("all_links", "INTERSECT", "meso_buffer_layer")
+        arcpy.management.CopyFeatures("all_links", "meso_links")
 
-        meso_override_shp = os.path.join(meso_override_folder, "meso_override.shp")
-        arcpy.management.CopyFeatures("meso_buffer", meso_override_shp)
+        override_meso = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor("meso_links", ["ABB"])], 
+            columns = ["ABB"]).ABB.to_list()
+        override_meso = set(override_meso)
+        
+        error_file= open(override_file_creation_errors, "a")
+
+        # get meso links which weren't selected by the override file 
+        missed_meso = all_meso - override_meso
+        error_file.write(f"{len(missed_meso)} links are base/replace MESO but are not selected by the override.\n")
+        error_file.write(str(missed_meso) + "\n")
+
+        # get links which are not meso but were selected by the override file
+        extra_meso = override_meso - all_meso
+        error_file.write(f"{len(missed_meso)} links are not are base/replace MESO but are selected by the override.\n")
+        error_file.write(str(extra_meso) + "\n")
+
+        error_file.close()
+
+        override_meso_folder = os.path.join(self.mfn_out_folder, "override_meso")
+        os.mkdir(override_meso_folder)
+
+        override_meso_shp = os.path.join(override_meso_folder, "override_meso.shp")
+        arcpy.management.CopyFeatures("meso_buffer", override_meso_shp)
         print("Meso override file made.\n")
 
     # HELPER METHODS ------------------------------------------------------------------------------
@@ -132,4 +163,4 @@ if __name__ == "__main__":
 
     FN = FreightNetwork()
     FN.generate_mfhn()
-    FN.make_meso_override()
+    FN.make_override_meso()
