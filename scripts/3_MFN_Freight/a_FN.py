@@ -19,7 +19,11 @@ class FreightNetwork:
         sys_path = sys.argv[0]
         abs_path = os.path.abspath(sys_path)
         mfhrn_path = os.path.dirname(os.path.dirname(os.path.dirname(abs_path)))
-        
+
+        in_folder = os.path.join(mfhrn_path, "input")
+        self.mfn_in_folder = os.path.join(in_folder, "3_MFN_Freight")
+        self.mfn_in_gdb = os.path.join(self.mfn_in_folder, "MFN.gdb")
+
         # already exists
         out_folder = os.path.join(mfhrn_path, "output")
         mhn_out_folder = os.path.join(out_folder, "1_MHN")
@@ -142,6 +146,13 @@ class FreightNetwork:
         arcpy.management.CopyFeatures("meso_buffer", override_meso_shp)
         print("Meso override file created.\n")
 
+    # subsets to meso 
+    def subset_to_meso(self):
+        
+        print("Subsetting highway links to Meso...")
+
+        self.copy_meso_info()
+
     # HELPER METHODS ------------------------------------------------------------------------------
 
     # helper method that copies a gdb
@@ -158,6 +169,25 @@ class FreightNetwork:
             else:
                 break
             
+    # helper method which copies meso information 
+    def copy_meso_info(self):
+
+        mfn_in_gdb = self.mfn_in_gdb
+        mfhn_all_gdb = self.mfhn_all_gdb
+        
+        meso_fcs = ["Meso_Ext_Int_Centroids", 
+                    "Meso_Logistic_Nodes", 
+                    "Meso_External_CMAP_merge", 
+                    "CMAP_Rail"]
+        
+        arcpy.management.CreateFeatureDataset(mfhn_all_gdb, "meso_info", spatial_reference = 26771)
+
+        for fc in meso_fcs:
+
+            input_fc = os.path.join(mfn_in_gdb, fc)
+            output_fc = os.path.join(mfhn_all_gdb, "meso_info", fc)
+            arcpy.management.CopyFeatures(input_fc, output_fc)
+
 # TESTING -----------------------------------------------------------------------------------------
 
 # main function for testing 
@@ -165,4 +195,4 @@ if __name__ == "__main__":
 
     FN = FreightNetwork()
     FN.generate_mfhn()
-    FN.create_override_meso()
+    FN.subset_to_meso()
