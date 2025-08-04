@@ -22,14 +22,15 @@ class FreightNetwork:
         
         # already exists
         out_folder = os.path.join(mfhrn_path, "output")
-        self.mhn_out_folder = os.path.join(out_folder, "1_MHN")
+        mhn_out_folder = os.path.join(out_folder, "1_MHN")
         self.mfn_out_folder = os.path.join(out_folder, "3_MFN_Freight")
 
-        self.mhn_all_gdb = os.path.join(self.mhn_out_folder, "MHN_all.gdb")
+        self.mhn_all_gdb = os.path.join(mhn_out_folder, "MHN_all.gdb")
         self.mfhn_all_gdb = os.path.join(self.mfn_out_folder, "MFHN_all.gdb")
 
     # MAIN METHODS --------------------------------------------------------------------------------
     
+    # generates output MFHN
     def generate_mfhn(self):
 
         print("Creating freight output folder...")
@@ -54,9 +55,10 @@ class FreightNetwork:
 
         print("Freight output folder created.\n")
 
-    def make_override_meso(self):
+    # creates override file
+    def create_override_meso(self):
 
-        print("Making meso override file...")
+        print("Creating meso override file...")
 
         arcpy.env.workspace = self.mfhn_all_gdb
 
@@ -138,7 +140,7 @@ class FreightNetwork:
 
         override_meso_shp = os.path.join(override_meso_folder, "override_meso.shp")
         arcpy.management.CopyFeatures("meso_buffer", override_meso_shp)
-        print("Meso override file made.\n")
+        print("Meso override file created.\n")
 
     # HELPER METHODS ------------------------------------------------------------------------------
 
@@ -155,7 +157,7 @@ class FreightNetwork:
                 pass
             else:
                 break
-
+            
 # TESTING -----------------------------------------------------------------------------------------
 
 # main function for testing 
@@ -163,4 +165,4 @@ if __name__ == "__main__":
 
     FN = FreightNetwork()
     FN.generate_mfhn()
-    FN.make_override_meso()
+    FN.create_override_meso()

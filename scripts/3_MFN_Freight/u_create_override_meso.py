@@ -12,7 +12,7 @@ if __name__ == "__main__":
 
     FN = FreightNetwork()
     FN.generate_mfhn()
-    FN.make_override_meso()
+    FN.create_override_meso()
 
     end_time = time.time()
     total_time = round(end_time - start_time)
