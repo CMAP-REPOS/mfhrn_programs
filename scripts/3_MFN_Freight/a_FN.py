@@ -142,6 +142,11 @@ class FreightNetwork:
         arcpy.management.SelectLayerByLocation("all_links", "INTERSECT", "meso_buffer_layer")
         arcpy.management.CopyFeatures("all_links", "override_meso_links")
 
+        arcpy.management.Delete("meso_links")
+        arcpy.management.Delete("non_meso_links")
+        arcpy.management.Delete("all_links")
+        arcpy.management.Delete("meso_buffer_layer")
+
         override_meso = pd.DataFrame(
             data = [row for row in arcpy.da.SearchCursor("override_meso_links", ["ABB"])], 
             columns = ["ABB"]).ABB.to_list()
@@ -168,15 +173,16 @@ class FreightNetwork:
         arcpy.management.CopyFeatures("meso_buffer", override_meso_shp)
         print("Meso override file created.\n")
 
-    # method that generates meso layers
-    def generate_meso_layers(self):
+    # method that creates meso layers
+    def create_meso_layers(self):
         
-        print("Generating meso layers...")
+        print("Creating meso layers...")
 
         self.copy_meso_info()
         self.create_special_node_fc()
         self.subset_to_meso()
         self.find_hanging_nodes()
+        self.connect_special_nodes()
 
     # HELPER METHODS ------------------------------------------------------------------------------
 
@@ -251,6 +257,8 @@ class FreightNetwork:
 
         arcpy.management.MakeFeatureLayer(special_fc, "null_layer", "flag IS NULL")
         arcpy.management.DeleteRows("null_layer")
+
+        arcpy.management.Delete("null_layer")
         print("Special node feature class created.\n")
 
     # helper method which subsets to meso 
@@ -292,6 +300,10 @@ class FreightNetwork:
                 skeleton_layer = f"skeleton_layer_{year}"
                 arcpy.management.MakeFeatureLayer(meso_fc, skeleton_layer, "NEW_BASELINK = '0'")
                 arcpy.management.DeleteRows(skeleton_layer)
+
+                arcpy.management.Delete(meso_layer)
+                arcpy.management.Delete(override_layer)
+                arcpy.management.Delete(skeleton_layer)
         
         print("Meso links subsetted.\n")
 
@@ -360,8 +372,14 @@ class FreightNetwork:
 
                     ucursor.updateRow(row)
 
+            arcpy.management.Delete(node_layer)
+
+        print("Hanging nodes found.\n")
+
     # helper method which connects the special nodes 
     def connect_special_nodes(self):
+
+        print("Connecting special nodes...")
 
         mfhn_all_gdb = self.mfhn_all_gdb
         arcpy.management.CreateFeatureDataset(mfhn_all_gdb, "conn_links", spatial_reference = 26771)
@@ -371,8 +389,27 @@ class FreightNetwork:
         for fc in hwylink_list:
 
             year = fc[8:12]
-            input_fc = os.path.join(mfhn_all_gdb, "special_nodes")
-            output_fc = os.path.join(mfhn_all_gdb, "hanging_nodes", f"HANGING_{year}")
+            special_fc = os.path.join(mfhn_all_gdb, "special_nodes")
+            conn_fc = os.path.join(mfhn_all_gdb, "conn_links", f"conn_links_{year}")
+
+            arcpy.management.CopyFeatures(special_fc, conn_fc)
+
+            fc_path = os.path.join(mfhn_all_gdb, "hwylinks_meso", fc)
+
+            conn_layer = f"conn_layer_{year}"
+            arcpy.management.MakeFeatureLayer(conn_fc, conn_layer)
+
+            link_layer = f"link_layer_{year}"
+            where_clause = "HANGING IS NULL"
+            arcpy.management.MakeFeatureLayer(fc_path, link_layer, where_clause)
+
+            arcpy.analysis.Near(conn_layer, link_layer)
+            arcpy.management.JoinField(conn_fc, "NEAR_FID", fc_path, "OBJECTID", ["ABB", "ANODE"])
+
+            arcpy.management.Delete(conn_layer)
+            arcpy.management.Delete(link_layer)
+
+        print("Special nodes connected.\n")
 
 # TESTING -----------------------------------------------------------------------------------------
 
@@ -381,4 +418,4 @@ if __name__ == "__main__":
 
     FN = FreightNetwork()
     FN.generate_mfhn()
-    FN.generate_meso_layers()
+    FN.create_meso_layers()
