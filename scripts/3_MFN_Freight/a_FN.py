@@ -183,6 +183,7 @@ class FreightNetwork:
         self.subset_to_meso()
         self.find_hanging_nodes()
         self.connect_special_nodes()
+        self.create_final_network()
 
     # HELPER METHODS ------------------------------------------------------------------------------
 
@@ -410,6 +411,52 @@ class FreightNetwork:
             arcpy.management.Delete(link_layer)
 
         print("Special nodes connected.\n")
+
+    # helper method which creates the final network
+    def create_final_network(self):
+        
+        print("Creating final meso network...")
+
+        mfhn_all_gdb = self.mfhn_all_gdb
+        hwynode_fc = os.path.join(mfhn_all_gdb, "hwynode_all")
+        hwynode_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(hwynode_fc, ["NODE", "POINT_X", "POINT_Y"])], 
+            columns = ["NODE", "POINT_X", "POINT_Y"])
+        
+        hwynode_dict = hwynode_df.set_index("NODE").to_dict("index")
+
+        freightnode_fc = os.path.join(mfhn_all_gdb, "special_nodes")
+        freightnode_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(freightnode_fc, ["NODE_ID", "POINT_X", "POINT_Y"])], 
+            columns = ["NODE_ID", "POINT_X", "POINT_Y"])
+        
+        freightnode_dict = freightnode_df.set_index("NODE_ID").to_dict("index")
+
+        arcpy.management.CreateFeatureDataset(mfhn_all_gdb, "final_links", spatial_reference = 26771)
+
+        hwylink_list = arcpy.ListFeatureClasses(feature_dataset = "hwylinks_meso")
+
+        for fc in hwylink_list:
+
+            year = fc[8:12]
+            final_workspace = os.path.join(mfhn_all_gdb, "final_links")
+
+            final_fc = f"final_links_{year}" 
+            arcpy.management.CreateFeatureclass(final_workspace, final_fc, "POLYLINE", spatial_reference = 26771)
+
+            final_fc = os.path.join(final_workspace, final_fc)
+            arcpy.management.AddFields(final_fc, [["INODE", "LONG"], ["JNODE", "LONG"],
+                                                  ["DIRECTIONS", "TEXT"], ["TYPE", "TEXT"],
+                                                  ["VDF", "SHORT"], ["MILES", "DOUBLE"],
+                                                  ["MODES", "TEXT"], ["LANES1", "SHORT"],
+                                                  ["LANES2", "SHORT"]])
+            
+            s_fields = ["SHAPE@", "ANODE", "BNODE", "DIRECTIONS", "MILES", 
+                        "THRULANES1", "THRULANES2", "HANGING"] 
+            i_fields = ["SHAPE@", "INODE", "JNODE", "DIRECTIONS", "MILES", 
+                        "LANES1", "LANES2", "TYPE", "VDF", "MODES"]
+
+        print("Final meso network created.")
 
 # TESTING -----------------------------------------------------------------------------------------
 
