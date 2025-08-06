@@ -39,6 +39,10 @@ class FreightNetwork:
         self.node_dict["CMAP_centroid"] = [i for i in range(1, 133)]
         self.node_dict["CMAP_logistic"] = [i for i in range(133, 151)]
         self.node_dict["national_centroid"] = [i for i in range(151, 274)] + [310, 399]
+
+        for num in [179, 180, 182]:
+            self.node_dict["national_centroid"].remove(num)
+
         self.node_dict["poe"] = [3634, 3636, 3639, 3640, 3641, 3642, 3643, 3644, 3647, 3648]
 
         years_csv_path = os.path.join(in_folder, "input_years.csv")
@@ -71,7 +75,123 @@ class FreightNetwork:
 
         print("Freight output folder created.\n")
 
-    # method that checks MFN 
+    # method that checks feature classes in the MFN 
+    def check_mfn_fcs(self): 
+
+        print("Checking feature classes for errors...")
+
+        mfn_in_gdb = self.mfn_in_gdb
+        mfn_out_folder = self.mfn_out_folder
+
+        errors = 0
+
+        base_feature_class_errors = os.path.join(
+            mfn_out_folder, 
+            "base_feature_class_errors.txt")
+        error_file= open(base_feature_class_errors, "a")
+
+        centroid_fc = os.path.join(mfn_in_gdb, "Meso_Ext_Int_Centroids")
+        logistic_fc = os.path.join(mfn_in_gdb, "Meso_Logistic_Nodes")
+        mesozones_fc = os.path.join(mfn_in_gdb, "Meso_External_CMAP_merge")
+
+        # CHECK CENTROID NODE FC
+        centroid_node_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(centroid_fc, ["NODE_ID"])],
+            columns = ["NODE_ID"]
+        )
+
+        centroid_node_counts = centroid_node_df.NODE_ID.value_counts()
+        centroid_node_set = set(centroid_node_df.NODE_ID.to_list())
+        valid_centroid = self.node_dict["CMAP_centroid"] + self.node_dict["national_centroid"]
+        valid_centroid_set = set(valid_centroid)
+
+        if (centroid_node_counts.max() > 1):
+            bad_node_df = centroid_node_counts[centroid_node_counts > 1]
+            error_file.write("These centroid nodes violate unique node ID constraint.\n")
+            error_file.write(bad_node_df.to_string() + "\n\n")
+            errors += 1 
+
+        extra_centroids = centroid_node_set - valid_centroid_set
+        missing_centroids = valid_centroid_set - centroid_node_set
+
+        if (len(extra_centroids) > 0):
+            error_file.write("These centroid nodes do not have valid node IDs: " + str(extra_centroids))
+            error_file.write("\n\n")
+            errors += 1
+
+        if (len(missing_centroids) > 0):
+            error_file.write("These centroid nodes are not in the feature class: " + str(missing_centroids))
+            error_file.write("\n\n")
+            errors += 1
+
+        # CHECK LOGISTIC NODE FC
+        logistic_node_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(logistic_fc, ["NODE_ID"])],
+            columns = ["NODE_ID"]
+        )
+
+        logistic_node_counts = logistic_node_df.NODE_ID.value_counts()
+        logistic_node_set = set(logistic_node_df.NODE_ID.to_list())
+        valid_logistic = self.node_dict["CMAP_logistic"] 
+        valid_logistic_set = set(valid_logistic)
+
+        if (logistic_node_counts.max() > 1):
+            bad_node_df = logistic_node_counts[logistic_node_counts > 1]
+            error_file.write("These logistic nodes violate unique node ID constraint.\n")
+            error_file.write(bad_node_df.to_string() + "\n\n")
+            errors += 1 
+
+        extra_logistic = logistic_node_set - valid_logistic_set
+        missing_logistic = valid_logistic_set - logistic_node_set
+
+        if (len(extra_logistic) > 0):
+            error_file.write("These logistic nodes do not have valid node IDs: " + str(extra_logistic))
+            error_file.write("\n\n")
+            errors += 1
+
+        if (len(missing_logistic) > 0):
+            error_file.write("These logistic nodes are not in the feature class: " + str(missing_logistic))
+            error_file.write("\n\n")
+            errors += 1
+
+        # CHECK MESOZONE FC
+        mesozones_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(mesozones_fc, ["MESOZONE"])],
+            columns = ["MESOZONE"]
+        )
+
+        mesozone_counts = mesozones_df.MESOZONE.value_counts()
+        mesozone_set = set(mesozones_df.MESOZONE.to_list())
+        valid_mesozone = self.node_dict["CMAP_centroid"] + self.node_dict["national_centroid"]
+        valid_mesozone_set = set(valid_mesozone)
+
+        if (mesozone_counts.max() > 1):
+            bad_zone_df = mesozone_counts[mesozone_counts > 1]
+            error_file.write("These mesozones violate unique zone number constraint.\n")
+            error_file.write(bad_zone_df.to_string() + "\n\n")
+            errors += 1 
+
+        extra_mesozones = mesozone_set - valid_mesozone_set
+        missing_mesozones = valid_mesozone_set - mesozone_set
+
+        if (len(extra_mesozones) > 0):
+            error_file.write("These mesozones do not have a valid zone number: " + str(extra_mesozones))
+            error_file.write("\n\n")
+            errors += 1
+
+        if (len(missing_mesozones) > 0):
+            error_file.write("These mesozones are not in the feature class: " + str(missing_mesozones))
+            error_file.write("\n\n")
+            errors += 1
+
+        error_file.close()
+
+        if errors > 0:
+            sys.exit("Error(s) were detected in the feature class(es). Crashing program.")
+        else:
+            os.remove(base_feature_class_errors)
+        
+        print("Base feature classes checked for errors.\n")
 
     # method that creates override file
     def create_override_meso(self):
@@ -238,17 +358,17 @@ class FreightNetwork:
         mfn_out_folder = self.mfn_out_folder
         mfhn_all_gdb = self.mfhn_all_gdb
 
-        centroids_fc = os.path.join(mfhn_all_gdb, "meso_info", "Meso_Ext_Int_Centroids")
+        centroid_fc = os.path.join(mfhn_all_gdb, "meso_info", "Meso_Ext_Int_Centroids")
         logistic_fc = os.path.join(mfhn_all_gdb, "meso_info", "Meso_Logistic_Nodes")
         special_fc = os.path.join(mfhn_all_gdb, "special_nodes")
 
-        arcpy.management.DeleteField(centroids_fc, ["NODE_ID", "POINT_X", "POINT_Y", "MESOZONE"], "KEEP_FIELDS")
-        arcpy.management.AddField(centroids_fc, "flag", "TEXT")
+        arcpy.management.DeleteField(centroid_fc, ["NODE_ID", "POINT_X", "POINT_Y", "MESOZONE"], "KEEP_FIELDS")
+        arcpy.management.AddField(centroid_fc, "flag", "TEXT")
 
         arcpy.management.DeleteField(logistic_fc, ["NODE_ID", "POINT_X", "POINT_Y", "MESOZONE"], "KEEP_FIELDS")
         arcpy.management.AddField(logistic_fc, "flag", "TEXT")
 
-        arcpy.management.Merge([centroids_fc, logistic_fc], special_fc) # combines centroids + logistic nodes
+        arcpy.management.Merge([centroid_fc, logistic_fc], special_fc) # combines centroids + logistic nodes
 
         with arcpy.da.UpdateCursor(special_fc, ["NODE_ID", "flag"]) as ucursor:
             for row in ucursor:
@@ -600,4 +720,4 @@ if __name__ == "__main__":
 
     FN = FreightNetwork()
     FN.generate_mfhn()
-    FN.create_meso_layers()
+    FN.check_mfn_fcs()
