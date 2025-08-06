@@ -156,10 +156,10 @@ class HighwayNetwork:
         # keep track of the errors 
         errors = 0
 
-        base_project_table_errors = os.path.join(
+        base_feature_class_errors = os.path.join(
             mhn_out_folder, 
             "base_feature_class_errors.txt")
-        error_file= open(base_project_table_errors, "a") # open error file, don't forget to close it!
+        error_file= open(base_feature_class_errors, "a") # open error file, don't forget to close it!
 
         # nodes must be unique 
         node_counts = hwynode_df.NODE.value_counts()
@@ -225,9 +225,9 @@ class HighwayNetwork:
         error_file.close()
 
         if errors > 0:
-            sys.exit("Error(s) were detected in the feature class. Crashing program.")
+            sys.exit("Error(s) were detected in the feature class(es). Crashing program.")
         else:
-            os.remove(base_project_table_errors)
+            os.remove(base_feature_class_errors)
 
         print("Base feature classes checked for errors.\n")
 
