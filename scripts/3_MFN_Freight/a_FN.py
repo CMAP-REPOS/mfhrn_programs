@@ -29,9 +29,9 @@ class FreightNetwork:
         # already exists
         out_folder = os.path.join(mfhrn_path, "output")
         mhn_out_folder = os.path.join(out_folder, "1_MHN")
-        self.mfn_out_folder = os.path.join(out_folder, "3_MFN_Freight")
-
         self.mhn_all_gdb = os.path.join(mhn_out_folder, "MHN_all.gdb")
+
+        self.mfn_out_folder = os.path.join(out_folder, "3_MFN_Freight")
         self.mfhn_all_gdb = os.path.join(self.mfn_out_folder, "MFHN_all.gdb")
 
         # special nodes
@@ -70,6 +70,8 @@ class FreightNetwork:
         self.copy_gdb_safe(mhn_all_gdb, mfhn_all_gdb)
 
         print("Freight output folder created.\n")
+
+    # method that checks MFN 
 
     # method that creates override file
     def create_override_meso(self):
@@ -182,11 +184,13 @@ class FreightNetwork:
         arcpy.env.workspace = self.mfhn_all_gdb
 
         self.copy_meso_info()
-        self.create_special_node_fc()
+        self.create_freight_node_fcs()
         self.subset_to_meso()
         self.find_hanging_nodes()
         self.connect_special_nodes()
         self.create_final_networks()
+
+        print("Meso layers created.\n")
 
     # HELPER METHODS ------------------------------------------------------------------------------
 
@@ -226,10 +230,12 @@ class FreightNetwork:
 
         print("Meso information copied.\n")
     
-    # helper method which creates special node fc
-    def create_special_node_fc(self):
+    # helper method which creates freight node fcs
+    def create_freight_node_fcs(self):
 
-        print("Creating special node feature class...")
+        print("Creating freight node feature classes...")
+
+        mfn_out_folder = self.mfn_out_folder
         mfhn_all_gdb = self.mfhn_all_gdb
 
         centroids_fc = os.path.join(mfhn_all_gdb, "meso_info", "Meso_Ext_Int_Centroids")
@@ -263,7 +269,35 @@ class FreightNetwork:
         arcpy.management.DeleteRows("null_layer")
 
         arcpy.management.Delete("null_layer")
-        print("Special node feature class created.\n")
+
+        hwynode_all_fc = os.path.join(mfhn_all_gdb, "hwynode_all")
+        mesozones_fc = os.path.join(mfhn_all_gdb, "meso_info", "Meso_External_CMAP_merge")
+
+        hwynode_zone_fc = os.path.join(mfhn_all_gdb, "hwynode_zone")
+
+        arcpy.analysis.SpatialJoin(hwynode_all_fc, mesozones_fc, hwynode_zone_fc)
+
+        meso_join_errors = os.path.join(
+            mfn_out_folder, 
+            "meso_join_errors.txt")
+        
+        hwynode_zone_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(hwynode_zone_fc, ["Join_Count", "NODE"])], 
+            columns = ["Join_Count", "NODE"])
+        
+        error_file= open(meso_join_errors, "a") # open error file, don't forget to close it!
+
+        no_zone_list = hwynode_zone_df[hwynode_zone_df.Join_Count == 0].NODE.to_list()
+        mult_zone_list = hwynode_zone_df[hwynode_zone_df.Join_Count > 1].NODE.to_list()
+
+        error_file.write(f"{len(no_zone_list)} highway nodes do not have a corresponding mesozone.\n")
+        error_file.write(str(no_zone_list) + "\n\n")
+        error_file.write(f"{len(mult_zone_list)} highway nodes have multiple corresponding mesozones.\n")
+        error_file.write(str(mult_zone_list) + "\n\n")
+
+        error_file.close()
+
+        print("Freight node feature classes created.\n")
 
     # helper method which subsets to meso 
     def subset_to_meso(self):
@@ -420,19 +454,26 @@ class FreightNetwork:
         print("Creating final meso network...")
 
         mfhn_all_gdb = self.mfhn_all_gdb
-        hwynode_fc = os.path.join(mfhn_all_gdb, "hwynode_all")
-        hwynode_df = pd.DataFrame(
-            data = [row for row in arcpy.da.SearchCursor(hwynode_fc, ["NODE", "POINT_X", "POINT_Y"])], 
-            columns = ["NODE", "POINT_X", "POINT_Y"])
         
-        hwynode_dict = hwynode_df.set_index("NODE").to_dict("index")
-
+        fields = ["NODE_ID", "SHAPE@X", "SHAPE@Y", "MESOZONE"]
         freightnode_fc = os.path.join(mfhn_all_gdb, "special_nodes")
-        freightnode_df = pd.DataFrame(
-            data = [row for row in arcpy.da.SearchCursor(freightnode_fc, ["NODE_ID", "POINT_X", "POINT_Y"])], 
-            columns = ["NODE_ID", "POINT_X", "POINT_Y"])
-        
-        freightnode_dict = freightnode_df.set_index("NODE_ID").to_dict("index")
+        freightnode_dict = {}
+
+        with arcpy.da.SearchCursor(freightnode_fc, fields) as scursor:
+            for row in scursor:
+
+                node_dict = {"POINT_X": row[1], "POINT_Y": row[2], "MESOZONE": row[3]}
+                freightnode_dict[row[0]] = node_dict
+
+        fields = ["NODE", "SHAPE@X", "SHAPE@Y", "MESOZONE"]
+        hwynode_fc = os.path.join(mfhn_all_gdb, "hwynode_zone")
+        hwynode_dict = {}
+
+        with arcpy.da.SearchCursor(hwynode_fc, fields) as scursor:
+            for row in scursor:
+
+                node_dict = {"POINT_X": row[1], "POINT_Y": row[2], "MESOZONE": row[3]}
+                hwynode_dict[row[0]] = node_dict
 
         arcpy.management.CreateFeatureDataset(mfhn_all_gdb, "final_links", spatial_reference = 26771)
         arcpy.management.CreateFeatureDataset(mfhn_all_gdb, "final_nodes", spatial_reference = 26771)
@@ -520,9 +561,10 @@ class FreightNetwork:
 
             final_node_fc = os.path.join(final_node_workspace, final_node_fc)
 
-            arcpy.management.AddFields(final_node_fc, [["NODE", "LONG"], ["POINT_X", "DOUBLE"], ["POINT_Y", "DOUBLE"]])
+            arcpy.management.AddFields(final_node_fc, [["NODE", "LONG"], ["POINT_X", "DOUBLE"], 
+                                                       ["POINT_Y", "DOUBLE"], ["MESOZONE", "LONG"]])
 
-            i_fields = ["SHAPE@", "NODE", "POINT_X", "POINT_Y"]
+            i_fields = ["SHAPE@", "NODE", "POINT_X", "POINT_Y", "MESOZONE"]
 
             with arcpy.da.InsertCursor(final_node_fc, i_fields) as icursor:
                 for node in final_node_set:
@@ -531,19 +573,23 @@ class FreightNetwork:
 
                         point_x = freightnode_dict[node]["POINT_X"]
                         point_y = freightnode_dict[node]["POINT_Y"]
+                        mesozone = freightnode_dict[node]["MESOZONE"]
+
                         point = arcpy.Point(point_x, point_y)
                         geom = arcpy.PointGeometry(point, spatial_reference = 26771)
 
-                        icursor.insertRow([geom, node, point_x, point_y])
+                        icursor.insertRow([geom, node, point_x, point_y, mesozone])
 
                     else:
                         
                         point_x = hwynode_dict[node]["POINT_X"]
                         point_y = hwynode_dict[node]["POINT_Y"]
+                        mesozone = hwynode_dict[node]["MESOZONE"]
+
                         point = arcpy.Point(point_x, point_y)
                         geom = arcpy.PointGeometry(point, spatial_reference = 26771)
 
-                        icursor.insertRow([geom, node, point_x, point_y])
+                        icursor.insertRow([geom, node, point_x, point_y, mesozone])
 
         print("Final meso network created.")
 
