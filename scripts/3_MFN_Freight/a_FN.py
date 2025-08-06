@@ -7,6 +7,7 @@ import os
 import shutil
 import sys
 import arcpy
+import math
 import pandas as pd
 import networkx as nx
 import time
@@ -178,12 +179,14 @@ class FreightNetwork:
         
         print("Creating meso layers...")
 
+        arcpy.env.workspace = self.mfhn_all_gdb
+
         self.copy_meso_info()
         self.create_special_node_fc()
         self.subset_to_meso()
         self.find_hanging_nodes()
         self.connect_special_nodes()
-        self.create_final_network()
+        self.create_final_networks()
 
     # HELPER METHODS ------------------------------------------------------------------------------
 
@@ -274,7 +277,6 @@ class FreightNetwork:
 
         override_shp = os.path.join(mfn_in_folder, "override_meso", "override_meso.shp")
 
-        arcpy.env.workspace = self.mfhn_all_gdb
         hwylink_list = arcpy.ListFeatureClasses(feature_dataset = "hwylinks_all")
 
         arcpy.management.CreateFeatureDataset(mfhn_all_gdb, "hwylinks_meso", spatial_reference = 26771)
@@ -412,8 +414,8 @@ class FreightNetwork:
 
         print("Special nodes connected.\n")
 
-    # helper method which creates the final network
-    def create_final_network(self):
+    # helper method which creates the final networks
+    def create_final_networks(self):
         
         print("Creating final meso network...")
 
@@ -433,28 +435,115 @@ class FreightNetwork:
         freightnode_dict = freightnode_df.set_index("NODE_ID").to_dict("index")
 
         arcpy.management.CreateFeatureDataset(mfhn_all_gdb, "final_links", spatial_reference = 26771)
+        arcpy.management.CreateFeatureDataset(mfhn_all_gdb, "final_nodes", spatial_reference = 26771)
 
         hwylink_list = arcpy.ListFeatureClasses(feature_dataset = "hwylinks_meso")
 
         for fc in hwylink_list:
 
             year = fc[8:12]
-            final_workspace = os.path.join(mfhn_all_gdb, "final_links")
 
-            final_fc = f"final_links_{year}" 
-            arcpy.management.CreateFeatureclass(final_workspace, final_fc, "POLYLINE", spatial_reference = 26771)
+            final_link_workspace = os.path.join(mfhn_all_gdb, "final_links")
+            final_link_fc = f"final_links_{year}" 
+            arcpy.management.CreateFeatureclass(final_link_workspace, final_link_fc, "POLYLINE", spatial_reference = 26771)
 
-            final_fc = os.path.join(final_workspace, final_fc)
-            arcpy.management.AddFields(final_fc, [["INODE", "LONG"], ["JNODE", "LONG"],
-                                                  ["DIRECTIONS", "TEXT"], ["TYPE", "TEXT"],
-                                                  ["VDF", "SHORT"], ["MILES", "DOUBLE"],
-                                                  ["MODES", "TEXT"], ["LANES1", "SHORT"],
-                                                  ["LANES2", "SHORT"]])
+            fc_path = os.path.join(mfhn_all_gdb, "hwylinks_meso", fc)
+            final_link_fc = os.path.join(final_link_workspace, final_link_fc)
+
+            arcpy.management.AddFields(final_link_fc, [["INODE", "LONG"], ["JNODE", "LONG"],
+                                                  ["DIRECTIONS", "TEXT"], ["MILES", "DOUBLE"], 
+                                                  ["LANES1", "SHORT"], ["LANES2", "SHORT"],
+                                                  ["TYPE", "TEXT"], ["VDF", "SHORT"], 
+                                                  ["MODES", "TEXT"]])
             
             s_fields = ["SHAPE@", "ANODE", "BNODE", "DIRECTIONS", "MILES", 
                         "THRULANES1", "THRULANES2", "HANGING"] 
             i_fields = ["SHAPE@", "INODE", "JNODE", "DIRECTIONS", "MILES", 
                         "LANES1", "LANES2", "TYPE", "VDF", "MODES"]
+            
+            # creating link class
+            # copy the geometry of the highway links
+            with arcpy.da.SearchCursor(fc_path, s_fields) as scursor:
+                with arcpy.da.InsertCursor(final_link_fc, i_fields) as icursor:
+
+                    for row in scursor:
+
+                        if row[7] != "Y":
+                            icursor.insertRow(
+                                [row[0], row[1], row[2], row[3], row[4], row[5], row[6], "1", 10, "T"]
+                            )
+
+            # add the connector links
+            conn_fc = os.path.join(mfhn_all_gdb, "conn_links", f"conn_links_{year}")
+
+            # node id corresponds to freght nodes, anode corresponds to highway nodes 
+            s_fields = ["NODE_ID", "ANODE"]
+
+            centroid = self.node_dict["CMAP_centroid"]
+            logistic = self.node_dict["CMAP_logistic"]
+            
+            with arcpy.da.SearchCursor(conn_fc, s_fields) as scursor:
+                with arcpy.da.InsertCursor(final_link_fc, i_fields) as icursor:
+
+                    for row in scursor:
+
+                        node_id = row[0]
+                        anode = row[1]
+
+                        inode_x = freightnode_dict[node_id]["POINT_X"]
+                        inode_y = freightnode_dict[node_id]["POINT_Y"]
+                        jnode_x = hwynode_dict[anode]["POINT_X"]
+                        jnode_y = hwynode_dict[anode]["POINT_Y"]
+
+                        dist = (math.sqrt((jnode_x - inode_x)**2 + (jnode_y - inode_y)**2))/5280
+
+                        geom_array = arcpy.Array(
+                            [arcpy.Point(inode_x, inode_y), arcpy.Point(jnode_x, jnode_y)]
+                            )
+                        geom = arcpy.Polyline(geom_array, 26771)
+
+                        if node_id in centroid:
+                            icursor.insertRow([geom, node_id, anode, "2", dist, 2, 2, "4", 10, "T"])
+                        elif node_id in logistic:
+                            icursor.insertRow([geom, node_id, anode, "2", dist, 2, 2, "7", 10, "T"])
+
+            # creating node class
+            final_link_df = pd.DataFrame(
+                data = [row for row in arcpy.da.SearchCursor(final_link_fc, ["INODE", "JNODE"])], 
+                columns = ["INODE", "JNODE"])
+            
+            final_node_set = set(final_link_df.INODE.to_list()) | set(final_link_df.JNODE.to_list())
+
+            final_node_workspace = os.path.join(mfhn_all_gdb, "final_nodes")
+            final_node_fc = f"final_nodes_{year}" 
+            arcpy.management.CreateFeatureclass(final_node_workspace, final_node_fc, "POINT", spatial_reference = 26771)
+
+            final_node_fc = os.path.join(final_node_workspace, final_node_fc)
+
+            arcpy.management.AddFields(final_node_fc, [["NODE", "LONG"], ["POINT_X", "DOUBLE"], ["POINT_Y", "DOUBLE"]])
+
+            i_fields = ["SHAPE@", "NODE", "POINT_X", "POINT_Y"]
+
+            with arcpy.da.InsertCursor(final_node_fc, i_fields) as icursor:
+                for node in final_node_set:
+
+                    if node in centroid or node in logistic:
+
+                        point_x = freightnode_dict[node]["POINT_X"]
+                        point_y = freightnode_dict[node]["POINT_Y"]
+                        point = arcpy.Point(point_x, point_y)
+                        geom = arcpy.PointGeometry(point, spatial_reference = 26771)
+
+                        icursor.insertRow([geom, node, point_x, point_y])
+
+                    else:
+                        
+                        point_x = hwynode_dict[node]["POINT_X"]
+                        point_y = hwynode_dict[node]["POINT_Y"]
+                        point = arcpy.Point(point_x, point_y)
+                        geom = arcpy.PointGeometry(point, spatial_reference = 26771)
+
+                        icursor.insertRow([geom, node, point_x, point_y])
 
         print("Final meso network created.")
 
