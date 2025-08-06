@@ -1,5 +1,7 @@
 ## u_create_meso_layers.py
-## Author: ccai (2025)
+## a translation of process_futureLinks.R
+## Author: kcazzato
+## Translated + Updated by ccai (2025) 
 
 from a_FN import FreightNetwork
 
