@@ -14,6 +14,7 @@ if __name__ == "__main__":
 
     FN = FreightNetwork()
     FN.generate_mfhn()
+    FN.check_mfn_fcs()
     FN.create_meso_layers()
 
     end_time = time.time()
