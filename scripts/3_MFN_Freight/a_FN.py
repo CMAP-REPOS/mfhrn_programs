@@ -43,7 +43,7 @@ class FreightNetwork:
         for num in [179, 180, 182]:
             self.node_dict["national_centroid"].remove(num)
 
-        self.node_dict["poe"] = [3634, 3636, 3639, 3640, 3641, 3642, 3643, 3644, 3647, 3648]
+        self.node_dict["poe"] = [3634, 3636, 3639, 3640, 3641, 3642, 3643, 3644, 3647, 3648] 
 
         years_csv_path = os.path.join(in_folder, "input_years.csv")
         self.years_list = pd.read_csv(years_csv_path)["years"].to_list()
@@ -452,15 +452,15 @@ class FreightNetwork:
                 arcpy.management.SelectLayerByLocation(meso_layer, "INTERSECT", override_layer, invert_spatial_relationship = "INVERT")
                 arcpy.management.DeleteRows(meso_layer)
 
-                # remove skeleton links
+                # remove skeleton links + failsafe for centroid connectors 
 
-                skeleton_layer = f"skeleton_layer_{year}"
-                arcpy.management.MakeFeatureLayer(meso_fc, skeleton_layer, "NEW_BASELINK = '0'")
-                arcpy.management.DeleteRows(skeleton_layer)
+                removal_layer = f"removal_layer_{year}"
+                arcpy.management.MakeFeatureLayer(meso_fc, removal_layer, "NEW_BASELINK = '0' OR TYPE1 = '6'")
+                arcpy.management.DeleteRows(removal_layer)
 
                 arcpy.management.Delete(meso_layer)
                 arcpy.management.Delete(override_layer)
-                arcpy.management.Delete(skeleton_layer)
+                arcpy.management.Delete(removal_layer)
         
         print("Meso links subsetted.\n")
 
