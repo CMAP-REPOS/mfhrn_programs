@@ -46,7 +46,7 @@ class FreightNetwork:
         self.node_dict["poe"] = [3634, 3636, 3639, 3640, 3641, 3642, 3643, 3644, 3647, 3648] 
 
         years_csv_path = os.path.join(in_folder, "input_years.csv")
-        self.years_list = pd.read_csv(years_csv_path)["years"].to_list()
+        self.years_list = pd.read_csv(years_csv_path)["year"].to_list()
 
     # MAIN METHODS --------------------------------------------------------------------------------
     
