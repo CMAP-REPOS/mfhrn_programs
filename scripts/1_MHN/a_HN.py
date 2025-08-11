@@ -34,7 +34,7 @@ class HighwayNetwork:
         self.mhn_out_folder = os.path.join(mfhrn_path, "output", "1_MHN")
         
         years_csv_path = os.path.join(self.in_folder, "input_years.csv")
-        years_list_raw = pd.read_csv(years_csv_path)["years"].to_list()
+        years_list_raw = pd.read_csv(years_csv_path)["year"].to_list()
 
         # highway files - names of feature classes + tables in MHN
         self.hwy_files = [
@@ -91,6 +91,8 @@ class HighwayNetwork:
         years_list.sort()
 
         self.years_list = years_list
+        self.years_dict = pd.read_csv(years_csv_path).set_index("year")["scenario"].to_dict()
+
         self.built_gdbs = []
 
     # MAIN METHODS --------------------------------------------------------------------------------
@@ -1105,6 +1107,26 @@ class HighwayNetwork:
 
         print("Highway data finalized.\n")
 
+    # method that generates files for input into EMME
+    def generate_hwy_files(self):
+
+        print("Generating highway files...")
+
+        self.current_gdb = os.path.join(self.mhn_out_folder, "MHN_all.gdb")
+
+        arcpy.env.workspace = self.current_gdb
+
+        # nodes 
+        node_fields = ["NODE", "SHAPE@X", "SHAPE@Y", "zone17", "capzone17"]
+        column_names = ["NODE", "POINT_X", "POINT_Y", "zone17", "capzone17"]
+        hwynode_all_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor("hwynode_all", node_fields)],
+            columns = column_names)
+        
+        hwynode_all_dict = hwynode_all_df.set_index("NODE").to_dict("index")
+
+        print(self.years_dict)
+
     # HELPER METHODS ------------------------------------------------------------------------------
 
     # helper method to get fields 
@@ -1859,10 +1881,7 @@ if __name__ == "__main__":
     start_time = time.time()
 
     HN = HighwayNetwork()
-    HN.generate_base_year()
-    HN.check_hwy_fcs()
-    HN.import_hwy_project_coding()
-    HN.check_hwy_project_table()
+    HN.generate_hwy_files()
 
     end_time = time.time()
     total_time = round(end_time - start_time)
