@@ -1860,8 +1860,7 @@ if __name__ == "__main__":
     start_time = time.time()
 
     HN = HighwayNetwork()
-    HN.generate_hwy_files()
-
+    
     end_time = time.time()
     total_time = round(end_time - start_time)
     minutes = math.floor(total_time / 60)
