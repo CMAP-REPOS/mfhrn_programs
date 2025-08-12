@@ -8,13 +8,11 @@
 ## Author: npeterson
 ## Translated by ccai (2025)
 
-import math
 import os
 import shutil
 import sys
 import arcpy
 import pandas as pd
-import time
 
 class HighwayNetwork:
 
@@ -1851,21 +1849,3 @@ class HighwayNetwork:
                 ucursor.updateRow(row)
 
         self.base_year = current_year
-
-# TESTING -----------------------------------------------------------------------------------------
-
-# main function for testing 
-if __name__ == "__main__":
-
-    start_time = time.time()
-
-    HN = HighwayNetwork()
-    
-    end_time = time.time()
-    total_time = round(end_time - start_time)
-    minutes = math.floor(total_time / 60)
-    seconds = total_time % 60
-
-    print(f"{minutes}m {seconds}s to execute.")
-
-    print("Done")

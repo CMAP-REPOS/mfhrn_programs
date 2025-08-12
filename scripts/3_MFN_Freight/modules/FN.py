@@ -10,7 +10,6 @@ import arcpy
 import math
 import pandas as pd
 import networkx as nx
-import time
 
 class FreightNetwork:
 
@@ -712,12 +711,3 @@ class FreightNetwork:
                         icursor.insertRow([geom, node, point_x, point_y, mesozone])
 
         print("Final meso network created.")
-
-# TESTING -----------------------------------------------------------------------------------------
-
-# main function for testing 
-if __name__ == "__main__":
-
-    FN = FreightNetwork()
-    FN.generate_mfhn()
-    FN.check_mfn_fcs()

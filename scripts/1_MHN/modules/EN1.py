@@ -12,7 +12,7 @@ import arcpy
 import pandas as pd
 from datetime import date
 
-class EmmeNetwork:
+class EmmeNetwork1:
 
     # constructor
     def __init__(self):
@@ -24,7 +24,8 @@ class EmmeNetwork:
 
         self.mhn_out_folder = os.path.join(mfhrn_path, "output", "1_MHN")
 
-        years_csv_path = os.path.join(self.in_folder, "input_years.csv")
+        in_folder = os.path.join(mfhrn_path, "input")
+        years_csv_path = os.path.join(in_folder, "input_years.csv")
 
         self.years_list = pd.read_csv(years_csv_path)["year"].to_list()
         self.years_dict = pd.read_csv(years_csv_path).set_index("year")["scenario"].to_dict()
@@ -62,7 +63,7 @@ class EmmeNetwork:
 
     # HELPER METHODS ------------------------------------------------------------------------------
 
-    # helper method that creates records of directional links for emme
+    # helper method that creates records of directional links
     def create_directional_records(self, hwylink_fc):
 
         link_fields = [f.name for f in arcpy.ListFields(hwylink_fc) if (f.type!="Geometry")]
@@ -154,7 +155,7 @@ class EmmeNetwork:
         
         max_zone_list = hwynode_df.zone17.to_list()
         max_zone_list.remove(9999)
-        max_zone = max_zone_list.max()
+        max_zone = max(max_zone_list)
         
         hwynode_dict = hwynode_df.set_index("NODE").to_dict("index")
 
@@ -162,7 +163,7 @@ class EmmeNetwork:
         hwylink_records = self.create_directional_records(hwylink_fc)
         hwylink_df = pd.DataFrame(hwylink_records)
 
-        for tod in ["0"]:
+        for tod in [str(i) for i in range(0, 9)]:
 
             ampm_links = []
 
@@ -183,12 +184,32 @@ class EmmeNetwork:
             n1_file_path = os.path.join(folder_path, f"{scenario}0{tod}.n1")
             n2_file_path = os.path.join(folder_path, f"{scenario}0{tod}.n2")
             n1_file = open(n1_file_path, "a")
+            n1_file.write("c a,node,x,y\n")
+            n1_file.write("t nodes init\n")
+
             n2_file = open(n2_file_path, "a")
+            n2_file.write("c i-node,@zone,@atype,@imarea\n")
 
             for node in node_set:
 
-                point_x = hwynode_dict[node]["SHAPE@X"]
-                point_y = hwynode_dict[node]["SHAPE@Y"]
+                a = "a" if node > max_zone else "a*"
+
+                len_str_node = len(str(node))
+
+                space1 = " " * (8 - len(a) - len_str_node)
+
+                point_x = str(hwynode_dict[node]["SHAPE@X"])[0:12]
+                point_y = str(hwynode_dict[node]["SHAPE@Y"])[0:12]
+
+                n1_file.write(f"{a}{space1}{node} {point_x} {point_y}\n")
+
+                zone = hwynode_dict[node]["zone17"]
+                capzone = hwynode_dict[node]["capzone17"]
+                imarea = hwynode_dict[node]["IMArea"]
+
+                space0 = " " * (6- len_str_node)
+
+                n2_file.write(f"{space0}{node} {zone}  {capzone}  {imarea}\n")
 
             n1_file.close()
             n2_file.close()
@@ -198,7 +219,7 @@ class EmmeNetwork:
 
         scenario = self.years_dict[year]
 
-        print(f"Writing linkshape files for scenario {scenario}...")
+        print(f"Writing linkshape files for scenario {scenario}...\n")
         today = date.today().strftime("%d%b%y").upper()
 
         linkshape_file_path = os.path.join(folder_path, "highway.linkshape")
@@ -227,22 +248,26 @@ class EmmeNetwork:
                         point_list.append((point.X, point.Y))
 
                 linkshape_file.write(f"r {anode} {bnode}\n")
-                for index, point in enumerate(point_list):
+                for i in range(0, len(point_list)):
 
+                    point= point_list[i]
                     x = point[0]
                     y = point[1]
-                    point_string = f"a {anode} {bnode} {index + 1} {x} {y}\n"
+
+                    point_string = f"a {anode} {bnode} {i + 1} {x} {y}\n"
                     linkshape_file.write(point_string)
 
                 if dirs == "1":
                     continue
 
                 linkshape_file.write(f"r {bnode} {anode}\n")
-                for index, point in enumerate(reversed(point_list)):
+                for i in range(1, len(point_list) + 1):
 
+                    point = point_list[-i]
                     x = point[0]
                     y = point[1]
-                    point_string = f"a {bnode} {anode} {index + 1} {x} {y}\n"
+
+                    point_string = f"a {bnode} {anode} {i} {x} {y}\n"
                     linkshape_file.write(point_string)
 
         linkshape_file.close()
