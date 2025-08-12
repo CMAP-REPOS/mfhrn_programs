@@ -1,7 +1,7 @@
 ## u_make_meso_override.py
 ## Author: ccai (2025)
 
-from a_FN import FreightNetwork
+from modules.FN import FreightNetwork
 
 import math
 import time

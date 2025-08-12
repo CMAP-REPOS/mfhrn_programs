@@ -3,7 +3,7 @@
 ## Author: kcazzato
 ## Translated + Updated by ccai (2025) 
 
-from a_FN import FreightNetwork
+from modules.FN import FreightNetwork
 
 import math
 import time

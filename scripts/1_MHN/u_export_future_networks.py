@@ -3,7 +3,7 @@
 ## Author: npeterson
 ## Translated + Updated by ccai (2025)
 
-from a_HN import HighwayNetwork
+from modules.HN import HighwayNetwork
 
 import os
 import sys
