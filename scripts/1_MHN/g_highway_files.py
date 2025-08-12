@@ -3,7 +3,7 @@
 ## Author: npeterson
 ## Translated + Updated by ccai (2025)
 
-from modules.HN import HighwayNetwork
+from modules.EN import EmmeNetwork
 
 import os
 import sys
@@ -16,8 +16,8 @@ if __name__ == "__main__":
     start_time = time.time()
 
     # generate highway files
-    HN = HighwayNetwork()
-    HN.generate_hwy_files()
+    EN = EmmeNetwork()
+    EN.generate_hwy_files()
 
     end_time = time.time()
     total_time = round(end_time - start_time)
