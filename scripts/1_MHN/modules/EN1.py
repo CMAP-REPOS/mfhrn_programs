@@ -1,6 +1,7 @@
 ## EN.py
 ## a combination of:
-## 1) generate_highway_files_2.sas
+## 1) MHN.py
+## 2) generate_highway_files_2.sas
 
 ## Author: npeterson
 ## Translated by ccai (2025)
@@ -77,9 +78,21 @@ class EmmeNetwork1:
                 
                 dirs = row[lf_dict["DIRECTIONS"]]
 
+                common_attr_dict = {
+                    "sigic": row[lf_dict["SIGIC"]],
+                    "cltl": row[lf_dict["CLTL"]],
+                    "rrx": row[lf_dict["RRGRADECROSS"]],
+                    "toll": row[lf_dict["TOLLDOLLARS"]],
+                    "modes": row[lf_dict["MODES"]],
+                    "blvd" : row[lf_dict["CHIBLVD"]],
+                    "truckres": row[lf_dict["TRUCKRES"]],
+                    "vclearance": row[lf_dict["VCLEARANCE"]],
+                    "miles": row[lf_dict["MILES"]]
+                }
+
                 attr_dict = {
-                    "fnode" : row[lf_dict["ANODE"]],
-                    "tnode" : row[lf_dict["BNODE"]],
+                    "inode" : row[lf_dict["ANODE"]],
+                    "jnode" : row[lf_dict["BNODE"]],
                     "type": row[lf_dict["TYPE1"]],
                     "ampm": row[lf_dict["AMPM1"]],
                     "speed": row[lf_dict["POSTEDSPEED1"]],
@@ -87,20 +100,15 @@ class EmmeNetwork1:
                     "feet": row[lf_dict["THRULANEWIDTH1"]],
                     "parklanes": row[lf_dict["PARKLANES1"]],
                     "parkres": row[lf_dict["PARKRES1"]],
-                    "sigic": row[lf_dict["SIGIC"]],
-                    "toll": row[lf_dict["TOLLDOLLARS"]],
-                    "modes": row[lf_dict["MODES"]],
-                    "truckres": row[lf_dict["TRUCKRES"]],
-                    "vclearance": row[lf_dict["VCLEARANCE"]]
-                }
+                } | common_attr_dict
 
                 hwylink_records.append(attr_dict)
 
                 if dirs == "2":
 
                     rev_dict = {
-                        "fnode" : row[lf_dict["BNODE"]],
-                        "tnode" : row[lf_dict["ANODE"]],
+                        "inode" : row[lf_dict["BNODE"]],
+                        "jnode" : row[lf_dict["ANODE"]],
                         "type": row[lf_dict["TYPE1"]],
                         "ampm": row[lf_dict["AMPM1"]],
                         "speed": row[lf_dict["POSTEDSPEED1"]],
@@ -108,20 +116,15 @@ class EmmeNetwork1:
                         "feet": row[lf_dict["THRULANEWIDTH1"]],
                         "parklanes": row[lf_dict["PARKLANES1"]],
                         "parkres": row[lf_dict["PARKRES2"]],
-                        "sigic": row[lf_dict["SIGIC"]],
-                        "toll": row[lf_dict["TOLLDOLLARS"]],
-                        "modes": row[lf_dict["MODES"]],
-                        "truckres": row[lf_dict["TRUCKRES"]],
-                        "vclearance": row[lf_dict["VCLEARANCE"]]
-                    }
+                    } | common_attr_dict
 
                     hwylink_records.append(rev_dict)
 
                 elif dirs == "3":
 
                     rev_dict = {
-                        "fnode" : row[lf_dict["BNODE"]],
-                        "tnode" : row[lf_dict["ANODE"]],
+                        "inode" : row[lf_dict["BNODE"]],
+                        "jnode" : row[lf_dict["ANODE"]],
                         "type": row[lf_dict["TYPE2"]],
                         "ampm": row[lf_dict["AMPM2"]],
                         "speed": row[lf_dict["POSTEDSPEED2"]],
@@ -129,12 +132,7 @@ class EmmeNetwork1:
                         "feet": row[lf_dict["THRULANEWIDTH2"]],
                         "parklanes": row[lf_dict["PARKLANES2"]],
                         "parkres": row[lf_dict["PARKRES2"]],
-                        "sigic": row[lf_dict["SIGIC"]],
-                        "toll": row[lf_dict["TOLLDOLLARS"]],
-                        "modes": row[lf_dict["MODES"]],
-                        "truckres": row[lf_dict["TRUCKRES"]],
-                        "vclearance": row[lf_dict["VCLEARANCE"]]
-                    }
+                    } | common_attr_dict
 
                     hwylink_records.append(rev_dict)
 
@@ -161,7 +159,8 @@ class EmmeNetwork1:
 
         hwylink_fc = f"HWYLINK_{year}"
         hwylink_records = self.create_directional_records(hwylink_fc)
-        hwylink_df = pd.DataFrame(hwylink_records)
+        hwylink_df = pd.DataFrame(hwylink_records).sort_values(["inode", "jnode"])
+        hwylink_df = hwylink_df[hwylink_df.modes != "4"]
 
         for tod in [str(i) for i in range(0, 9)]:
 
@@ -179,8 +178,83 @@ class EmmeNetwork1:
                 ampm_links += ["1", "3", "4"]
 
             hwylink_df = hwylink_df[hwylink_df.ampm.isin(ampm_links)]
-            node_set = set(hwylink_df.fnode.to_list()) | set(hwylink_df.tnode.to_list())
+            hwylink_dict = hwylink_df.set_index(["inode", "jnode"]).to_dict("index")
+            node_set = set(hwylink_df.inode.to_list()) | set(hwylink_df.jnode.to_list())
 
+            # LINKS
+            l1_file_path = os.path.join(folder_path, f"{scenario}0{tod}.l1")
+            l2_file_path = os.path.join(folder_path, f"{scenario}0{tod}.l2")
+            l1_file = open(l1_file_path, "a")
+            l1_file.write("c a,i-node,j-node,length,modes,type,lanes,vdf\n")
+            l1_file.write("t links init\n")
+
+            l2_file = open(l2_file_path, "a")
+            l2_file.write("c i-node,j-node,@speed,@width,@parkl,@cltl,@toll,@sigic,@rrx,@tipid\n")
+
+            for link in hwylink_dict:
+
+                inode = link[0]
+                jnode = link[1]
+
+                len_str_inode = len(str(inode))
+                len_str_jnode = len(str(jnode))
+
+                space1 = " " * (7 - len_str_inode)
+                space2 = " " * (7 - len_str_jnode)
+
+                length = round(hwylink_dict[link]["miles"], 2)
+
+                # sigh... calculate mode
+                modes = hwylink_dict[link]["modes"]
+                truckres = hwylink_dict[link]["truckres"]
+                blvd = hwylink_dict[link]["blvd"]
+                vclearance = hwylink_dict[link]["vclearance"]
+
+                emode = "ASHThmlb" # default
+
+                if modes == "2":
+                    if truckres in ["1", "18"]:
+                        emode = "ASH" # no trucks 
+                    elif truckres in ["2", "3", "4", "9", "10", "11", "13", "25", "35", "37"]:
+                        emode = "ASHTb" # b-plates are allowed
+                    elif truckres in ["7", "8", "14", "16", "17", "19", "27", "29", "31", "34", 
+                                      "38", "39", "40", "41", "42", "43", "44", "46", "47", "49"]:
+                        emode = "ASHTlb" # light trucks are allowed
+                    elif truckres in ["5", "30", "45", "48"]:
+                        emode = "ASHTmlb" # medium trucks are allowed
+                    elif truckres == "21" and tod == "1":
+                        emode == "ASH" # no trucks are allowed overnight
+                    elif truckres == "12" and tod == "1":
+                        emode = "ASHTb" # b-plates are allowed overnight
+
+                    if blvd == 1:
+                        emode = "ASH"
+
+                elif modes == "3":
+                    emode = "AThmlb"
+                elif modes == "5":
+                    emode = "AH"
+
+                if vclearance < 162:
+                    emode.replace("h", "") # minimum 13'6" clearance for heavy trucks;
+                if vclearance < 150:
+                    emode.replace("m", "") # minimum 12'6" clearance for medium trucks;
+                if vclearance < 138:
+                    emode.replace("l", "") # minimum 11'6" clearance for light trucks;
+
+                space3 = " " * (8 - len(emode))
+
+                # figure out # of lanes 
+                parkres = hwylink_dict[link]["parkres"]
+
+
+                l1_file.write(f"a{space1}{inode}{space2}{jnode} {length} ")
+                l1_file.write(f"{emode}{space3} 1\n")
+
+            l1_file.close()
+            l2_file.close()
+
+            # NODES
             n1_file_path = os.path.join(folder_path, f"{scenario}0{tod}.n1")
             n2_file_path = os.path.join(folder_path, f"{scenario}0{tod}.n2")
             n1_file = open(n1_file_path, "a")
