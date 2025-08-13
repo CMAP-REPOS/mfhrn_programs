@@ -88,7 +88,6 @@ class HighwayNetwork:
         years_list.sort()
 
         self.years_list = years_list
-        self.years_dict = pd.read_csv(years_csv_path).set_index("year")["scenario"].to_dict()
 
         self.built_gdbs = []
 
