@@ -1,4 +1,4 @@
-## EN.py
+## EN1.py
 ## a combination of:
 ## 1) MHN.py
 ## 2) generate_highway_files_2.sas
@@ -30,6 +30,13 @@ class EmmeNetwork1:
 
         self.years_list = pd.read_csv(years_csv_path)["year"].to_list()
         self.years_dict = pd.read_csv(years_csv_path).set_index("year")["scenario"].to_dict()
+
+        self.truckres_dict = {}
+        self.truckres_dict["ASH"] = ["1", "18"]
+        self.truckres_dict["ASHTb"] = ["2", "3", "4", "9", "10", "11", "13", "25", "35", "37"]
+        self.truckres_dict["ASHTlb"] = ["7", "8", "14", "16", "17", "19", "27", "29", "31", "34", 
+                                      "38", "39", "40", "41", "42", "43", "44", "46", "47", "49"]
+        self.truckres_dict["ASHTmlb"] = ["5", "30", "45", "48"]
 
     # MAIN METHODS --------------------------------------------------------------------------------
 
@@ -213,14 +220,13 @@ class EmmeNetwork1:
                 emode = "ASHThmlb" # default
 
                 if modes == "2":
-                    if truckres in ["1", "18"]:
+                    if truckres in self.truckres_dict["ASH"]:
                         emode = "ASH" # no trucks 
-                    elif truckres in ["2", "3", "4", "9", "10", "11", "13", "25", "35", "37"]:
+                    elif truckres in self.truckres_dict["ASHTb"]:
                         emode = "ASHTb" # b-plates are allowed
-                    elif truckres in ["7", "8", "14", "16", "17", "19", "27", "29", "31", "34", 
-                                      "38", "39", "40", "41", "42", "43", "44", "46", "47", "49"]:
+                    elif truckres in self.truckres_dict["ASHTlb"]:
                         emode = "ASHTlb" # light trucks are allowed
-                    elif truckres in ["5", "30", "45", "48"]:
+                    elif truckres in self.truckres_dict["ASHTmlb"]:
                         emode = "ASHTmlb" # medium trucks are allowed
                     elif truckres == "21" and tod == "1":
                         emode == "ASH" # no trucks are allowed overnight
@@ -228,7 +234,7 @@ class EmmeNetwork1:
                         emode = "ASHTb" # b-plates are allowed overnight
 
                     if blvd == 1:
-                        emode = "ASH"
+                        emode = "ASH" # overrides truck restriction
 
                 elif modes == "3":
                     emode = "AThmlb"
