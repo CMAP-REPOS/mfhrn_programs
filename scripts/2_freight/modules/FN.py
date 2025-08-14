@@ -22,15 +22,15 @@ class FreightNetwork:
         mfhrn_path = os.path.dirname(os.path.dirname(os.path.dirname(abs_path)))
 
         in_folder = os.path.join(mfhrn_path, "input")
-        self.mfn_in_folder = os.path.join(in_folder, "3_MFN_Freight")
+        self.mfn_in_folder = os.path.join(in_folder, "2_freight")
         self.mfn_in_gdb = os.path.join(self.mfn_in_folder, "MFN.gdb")
 
         # already exists
         out_folder = os.path.join(mfhrn_path, "output")
-        mhn_out_folder = os.path.join(out_folder, "1_MHN")
+        mhn_out_folder = os.path.join(out_folder, "1_travel")
         self.mhn_all_gdb = os.path.join(mhn_out_folder, "MHN_all.gdb")
 
-        self.mfn_out_folder = os.path.join(out_folder, "3_MFN_Freight")
+        self.mfn_out_folder = os.path.join(out_folder, "2_freight")
         self.mfhn_all_gdb = os.path.join(self.mfn_out_folder, "MFHN_all.gdb")
 
         # special nodes

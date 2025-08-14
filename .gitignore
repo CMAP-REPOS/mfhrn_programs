@@ -1,9 +1,10 @@
 _misc/
 
-input/1_MHN/MHN.gdb
-input/1_MHN/import_hwy_project_coding.xlsx
-input/1_MHN/subset_hwy_projects.csv
-input/3_MFN_Freight/*
+input/1_travel/MHN.gdb
+input/1_travel/import_hwy_project_coding.xlsx
+input/1_travel/subset_hwy_projects.csv
+input/2_freight/MFN.gdb
+input/2_freight/override_meso
 
 output/
 *__pycache__*

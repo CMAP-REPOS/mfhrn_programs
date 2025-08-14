@@ -23,7 +23,7 @@ class EmmeNetwork1:
         abs_path = os.path.abspath(sys_path)
         mfhrn_path = os.path.dirname(os.path.dirname(os.path.dirname(abs_path)))
 
-        self.mhn_out_folder = os.path.join(mfhrn_path, "output", "1_MHN")
+        self.mhn_out_folder = os.path.join(mfhrn_path, "output", "1_travel")
 
         in_folder = os.path.join(mfhrn_path, "input")
         years_csv_path = os.path.join(in_folder, "input_years.csv")

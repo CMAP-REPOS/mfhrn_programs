@@ -25,10 +25,10 @@ class HighwayNetwork:
         mfhrn_path = os.path.dirname(os.path.dirname(os.path.dirname(abs_path)))
         
         self.in_folder = os.path.join(mfhrn_path, "input")
-        self.mhn_in_folder = os.path.join(self.in_folder, "1_MHN")
+        self.mhn_in_folder = os.path.join(self.in_folder, "1_travel")
         self.mhn_in_gdb = os.path.join(self.mhn_in_folder, "MHN.gdb")
 
-        self.mhn_out_folder = os.path.join(mfhrn_path, "output", "1_MHN")
+        self.mhn_out_folder = os.path.join(mfhrn_path, "output", "1_travel")
         
         years_csv_path = os.path.join(self.in_folder, "input_years.csv")
         years_list_raw = pd.read_csv(years_csv_path)["year"].to_list()
