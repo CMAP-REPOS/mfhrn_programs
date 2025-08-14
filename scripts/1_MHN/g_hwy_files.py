@@ -1,4 +1,4 @@
-## g_highway_files.py
+## g_hwy_files.py
 ## a translation of generate_highway_files.py
 ## Author: npeterson
 ## Translated + Updated by ccai (2025)
