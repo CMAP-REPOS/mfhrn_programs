@@ -24,17 +24,17 @@ if __name__ == "__main__":
     sys_path = sys.argv[0]
     abs_path = os.path.abspath(sys_path)
     mfhrn_path = os.path.dirname(os.path.dirname(os.path.dirname(abs_path)))
-    import_path = os.path.join(mfhrn_path, "input", "1_travel", "import_hwy_project_coding.xlsx")
+    import_path = os.path.join(mfhrn_path, "input", "1_travel", "import_hwyproj_coding.xlsx")
 
     if not os.path.exists(import_path):
-        sys.exit("Please provide a file of the project coding to import as import_hwy_project_coding.xlsx.")
+        sys.exit("Please provide a file of the project coding to import as import_hwyproj_coding.xlsx.")
 
     # import highway project coding
     HN = HighwayNetwork()
     HN.generate_base_year()
     HN.check_hwy_fcs()
-    HN.import_hwy_project_coding()
-    HN.check_hwy_project_table()
+    HN.import_hwyproj_coding()
+    HN.check_hwyproj_coding_table()
     if args.final:
         HN.finalize_hwy_data()
 

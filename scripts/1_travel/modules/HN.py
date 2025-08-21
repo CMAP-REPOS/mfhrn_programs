@@ -230,7 +230,7 @@ class HighwayNetwork:
         print("Base feature classes checked for errors.\n")
 
     # method that imports highway project coding
-    def import_hwy_project_coding(self): 
+    def import_hwyproj_coding(self): 
 
         print("Importing highway project coding...")
 
@@ -238,7 +238,7 @@ class HighwayNetwork:
         mhn_out_folder = self.mhn_out_folder
         hwylink_df = self.hwylink_df 
 
-        import_path = os.path.join(mhn_in_folder, "import_hwy_project_coding.xlsx")
+        import_path = os.path.join(mhn_in_folder, "import_hwyproj_coding.xlsx")
         import_df = pd.read_excel(import_path)
 
         import_df = import_df.dropna(how = "all")
@@ -426,8 +426,8 @@ class HighwayNetwork:
 
         print("Highway project coding imported.\n")
 
-    # method that checks the project table
-    def check_hwy_project_table(self):
+    # method that checks the project coding table
+    def check_hwyproj_coding_table(self):
 
         print("Checking base project table for errors...")
         

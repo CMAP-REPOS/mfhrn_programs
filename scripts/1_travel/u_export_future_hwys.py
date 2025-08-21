@@ -34,7 +34,7 @@ if __name__ == "__main__":
     HN = HighwayNetwork()
     HN.generate_base_year()
     HN.check_hwy_fcs()
-    HN.check_hwy_project_table()
+    HN.check_hwyproj_coding_table()
     HN.build_future_hwys(subset = args.subset)
 
     end_time = time.time()
