@@ -1,10 +1,11 @@
-## g_hwy_files.py
-## a translation of generate_highway_files.py
+## m_hwy_features.py
+## a translation of incorporate_edits.py
 ## Author: npeterson
 ## Translated + Updated by ccai (2025)
 
-from modules.EN1 import EmmeNetwork1
+from modules.HN import HighwayNetwork
 
+import os
 import math
 import time
 
@@ -12,9 +13,11 @@ if __name__ == "__main__":
 
     start_time = time.time()
 
-    # generate highway files
-    EN1 = EmmeNetwork1()
-    EN1.generate_hwy_files()
+    HN = HighwayNetwork()
+
+    # have to change manually
+    HN.current_gdb = os.path.join(HN.mhn_out_folder, f"MHN_{HN.base_year}.gdb")
+    HN.built_gdbs.append(HN.current_gdb)
 
     end_time = time.time()
     total_time = round(end_time - start_time)
