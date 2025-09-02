@@ -19,6 +19,9 @@ if __name__ == "__main__":
     HN.current_gdb = os.path.join(HN.mhn_out_folder, f"MHN_{HN.base_year}.gdb")
     HN.built_gdbs.append(HN.current_gdb)
 
+    HN.check_hwy_fcs()
+    HN.finalize_hwy_data()
+
     end_time = time.time()
     total_time = round(end_time - start_time)
     minutes = math.floor(total_time / 60)
