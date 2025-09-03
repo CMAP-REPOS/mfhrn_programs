@@ -280,12 +280,12 @@ class HighwayNetwork:
                 lanes2 = row[lf_dict["THRULANES2"]]
                 feet1 = row[lf_dict["THRULANEWIDTH1"]]
                 feet2 = row[lf_dict["THRULANEWIDTH2"]]
-                park1 = row[lf_dict["PARKLANES1"]]
-                park2 = row[lf_dict["PARKLANES2"]]
+                parklanes1 = row[lf_dict["PARKLANES1"]]
+                parklanes2 = row[lf_dict["PARKLANES2"]]
                 parkres1 = row[lf_dict["PARKRES1"]]
                 parkres2 = row[lf_dict["PARKRES2"]]
-                bus1 = row[lf_dict["BUSLANES1"]]
-                bus2 = row[lf_dict["BUSLANES2"]]
+                buslanes1 = row[lf_dict["BUSLANES1"]]
+                buslanes2 = row[lf_dict["BUSLANES2"]]
                 sigic = row[lf_dict["SIGIC"]]
                 cltl = row[lf_dict["CLTL"]]
                 rr = row[lf_dict["RRGRADECROSS"]]
@@ -302,11 +302,17 @@ class HighwayNetwork:
 
                 # check that skeleton links don't have coded info
                 zero_fields = [type1, type2, ampm1, ampm2, speed1, speed2, 
-                               lanes1, lanes2, feet1, feet2, park1, park2, bus1, bus2, 
+                               lanes1, lanes2, feet1, feet2, parklanes1, parklanes2, buslanes1, buslanes2, 
                                sigic, cltl, rr, toll, modes, vclearance]
                 
                 if baselink == "0":
-                    if any(int(field) != 0 for field in zero_fields):
+                    try:
+                        if any(int(field) != 0 for field in zero_fields):
+                            link_fail += 1
+                            row[desc_pos] = "Error: Skeleton links should not have project coded values"
+                            ucursor.updateRow(row)
+                            continue
+                    except:
                         link_fail += 1
                         row[desc_pos] = "Error: Skeleton links should not have project coded values"
                         ucursor.updateRow(row)
@@ -335,7 +341,7 @@ class HighwayNetwork:
 
                 # check that existing links with dirs = 1 or 2
                 # only have 1 fields filled in
-                all_fields2 = [type2, ampm2, speed2, lanes2, feet2, park2, bus2]
+                all_fields2 = [type2, ampm2, speed2, lanes2, feet2, parklanes2, buslanes2]
 
                 if baselink == "1" and dirs in ["1", "2"]:
                     if any(int(field) != 0 for field in all_fields2):
@@ -370,8 +376,38 @@ class HighwayNetwork:
                         continue
 
                 # check parkres != 0
+                if parkres1 == "0" or parkres2 == "0":
+                    link_fail += 1
+                    row[desc_pos] = "Error: '0' is reserved for CHANGE_PARKRES. Did you mean '-'?"
+                    ucursor.updateRow(row)
+                    continue
+
                 # check vclearance != -1 
+                if vclearance < 0:
+                    link_fail += 1
+                    row[desc_pos] = "Error: VCLEARANCE cannot be negative."
+                    ucursor.updateRow(row)
+                    continue
+
                 # check toll is correct
+                try:
+                    static_toll = float(toll)
+                except:
+                    dynamic_toll = toll.split()
+
+                    if len(dynamic_toll) != 8:
+                        link_fail += 1
+                        row[desc_pos] = "Error: Toll must be a decimal or a string of 8 decimals"
+                        ucursor.updateRow(row)
+                        continue
+                    
+                    try:
+                        dynamic_toll = [float(tod_toll) for tod_toll in dynamic_toll]
+                    except:
+                        link_fail += 1
+                        row[desc_pos] = "Error: Toll must be a decimal or a string of 8 decimals"
+                        ucursor.updateRow(row)
+                        continue
 
         if link_fail > 0:
             error_file.write(f"{link_fail} links failed the individual row check. Check output gdb.\n")
@@ -379,6 +415,13 @@ class HighwayNetwork:
             error_file.write("No links failed the individual row check.\n")
                     
         error_file.close()
+
+        if node_fail != 0 or link_fail != 0:
+            sys.exit(f"There are {node_fail} nodes with issues and {link_fail} links with issues. Crashing program.")
+
+        os.remove(base_feature_class_errors)
+
+        print("Base feature classes checked for errors.\n")
 
     # method that cleans up the output gdbs 
     def finalize_hwy_data(self):
