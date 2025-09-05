@@ -104,7 +104,7 @@ class HighwayNetwork:
 
         # add fields to review updates (a la Volpe)
         arcpy.management.AddField(hwynode_fc, "DESCRIPTION", "TEXT")
-        arcpy.management.AddFields(hwylink_fc, [["NEW_BASELINK", "TEXT"], ["PROJECT", "TEXT"], ["DESCRIPTION", "TEXT"]])
+        arcpy.management.AddFields(hwylink_fc, [["NEW_BASELINK", "TEXT"], ["DESCRIPTION", "TEXT"], ["PROJECT", "TEXT"]])
         arcpy.management.CalculateField(
             in_table= hwylink_fc,
             field="NEW_BASELINK",
@@ -115,7 +115,7 @@ class HighwayNetwork:
             enforce_domains="NO_ENFORCE_DOMAINS")
         arcpy.management.AddField(hwyproj_fc, "DESCRIPTION", "TEXT")
         
-        arcpy.management.AddFields(coding_table, [["USE", "SHORT"], ["PROCESS_NOTES", "TEXT"]])
+        arcpy.management.AddFields(coding_table, [["PROCESS_NOTES", "TEXT"], ["USE", "SHORT"]])
 
         print("Base year copied and prepared for modification.\n")
 
@@ -191,6 +191,9 @@ class HighwayNetwork:
         node_fail = 0
         hwynode_fc = os.path.join(self.current_gdb, "hwynet/hwynet_node")
         hwynode_fields = ["NODE", "subzone17", "zone17", "capzone17", "IMArea", "DESCRIPTION"]
+
+        # wipe description 
+        arcpy.management.CalculateField(hwynode_fc, "DESCRIPTION", '" "', "PYTHON3")
         
         with arcpy.da.UpdateCursor(hwynode_fc, hwynode_fields) as ucursor:
             for row in ucursor:
@@ -216,6 +219,9 @@ class HighwayNetwork:
         link_domain_dict = self.get_field_domain_dict(hwylink_fc)
 
         desc_pos = lf_dict["DESCRIPTION"]
+
+        # wipe description 
+        arcpy.management.CalculateField(hwylink_fc, "DESCRIPTION", '" "', "PYTHON3")
 
         with arcpy.da.UpdateCursor(hwylink_fc, link_fields) as ucursor:
             for row in ucursor:
@@ -413,6 +419,8 @@ class HighwayNetwork:
             error_file.write(f"{link_fail} links failed the individual row check. Check output gdb.\n")
         else:
             error_file.write("No links failed the individual row check.\n")
+
+        # CONNECTIVITY CHECK
                     
         error_file.close()
 
@@ -432,9 +440,9 @@ class HighwayNetwork:
         coding_table = os.path.join(self.current_gdb, "hwyproj_coding")
 
         arcpy.management.DeleteField(hwynode_fc, ["DESCRIPTION"])
-        arcpy.management.DeleteField(hwylink_fc, ["NEW_BASELINK", "PROJECT", "DESCRIPTION"])
+        arcpy.management.DeleteField(hwylink_fc, ["NEW_BASELINK", "DESCRIPTION", "PROJECT"])
         arcpy.management.DeleteField(hwyproj_fc, ["DESCRIPTION"])
-        arcpy.management.DeleteField(coding_table, ["COMPLETION_YEAR", "USE", "PROCESS_NOTES"])
+        arcpy.management.DeleteField(coding_table, ["COMPLETION_YEAR", "PROCESS_NOTES", "USE"])
 
         self.add_rcs()
 
