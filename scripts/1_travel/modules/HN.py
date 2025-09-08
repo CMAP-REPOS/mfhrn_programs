@@ -294,7 +294,7 @@ class HighwayNetwork:
                 buslanes2 = row[lf_dict["BUSLANES2"]]
                 sigic = row[lf_dict["SIGIC"]]
                 cltl = row[lf_dict["CLTL"]]
-                rr = row[lf_dict["RRGRADECROSS"]]
+                rrgradex = row[lf_dict["RRGRADECROSS"]]
                 toll = row[lf_dict["TOLLDOLLARS"]]
                 modes = row[lf_dict["MODES"]]
                 vclearance = row[lf_dict["VCLEARANCE"]]
@@ -309,16 +309,10 @@ class HighwayNetwork:
                 # check that skeleton links don't have coded info
                 zero_fields = [type1, type2, ampm1, ampm2, speed1, speed2, 
                                lanes1, lanes2, feet1, feet2, parklanes1, parklanes2, buslanes1, buslanes2, 
-                               sigic, cltl, rr, toll, modes, vclearance]
+                               sigic, cltl, rrgradex, toll, modes, vclearance]
                 
                 if baselink == "0":
-                    try:
-                        if any(int(field) != 0 for field in zero_fields):
-                            link_fail += 1
-                            row[desc_pos] = "Error: Skeleton links should not have project coded values"
-                            ucursor.updateRow(row)
-                            continue
-                    except:
+                    if any(str(field) != "0" for field in zero_fields):
                         link_fail += 1
                         row[desc_pos] = "Error: Skeleton links should not have project coded values"
                         ucursor.updateRow(row)
@@ -334,7 +328,7 @@ class HighwayNetwork:
                 req_fields = [type1, ampm1, lanes1, feet1, modes]
                 
                 if baselink == "1":
-                    if any(int(field) == 0 for field in req_fields):
+                    if any(str(field) == "0" for field in req_fields):
                         link_fail += 1
                         row[desc_pos] = "Error: Missing required attribute(s) on link"
                         ucursor.updateRow(row)
@@ -350,7 +344,7 @@ class HighwayNetwork:
                 all_fields2 = [type2, ampm2, speed2, lanes2, feet2, parklanes2, buslanes2]
 
                 if baselink == "1" and dirs in ["1", "2"]:
-                    if any(int(field) != 0 for field in all_fields2):
+                    if any(str(field) != "0" for field in all_fields2):
                         link_fail += 1
                         row[desc_pos] = f"Error: Unusable '2' attributes for this DIRECTIONS = {dirs} link"
                         ucursor.updateRow(row)
@@ -370,7 +364,7 @@ class HighwayNetwork:
                 req_fields2 = [type2, ampm2, speed2, lanes2]
 
                 if baselink == "1" and dirs == "3":
-                    if any(int(field) == 0 for field in req_fields2):
+                    if any(str(field) == "0" for field in req_fields2):
                         link_fail += 1
                         row[desc_pos] = f"Error: Missing required '2' attribute(s) on DIRECTIONS = 3 link"
                         ucursor.updateRow(row)
@@ -420,16 +414,395 @@ class HighwayNetwork:
         else:
             error_file.write("No links failed the individual row check.\n")
 
-        # CONNECTIVITY CHECK
-                    
-        error_file.close()
-
         if node_fail != 0 or link_fail != 0:
             sys.exit(f"There are {node_fail} nodes with issues and {link_fail} links with issues. Crashing program.")
+
+        # CONNECTIVITY CHECK
+
+        error_file.close()
 
         os.remove(base_feature_class_errors)
 
         print("Base feature classes checked for errors.\n")
+
+    # method that imports highway project coding
+    def import_hwyproj_coding(self): 
+
+        print("Importing highway project coding...")
+
+        mhn_in_folder = self.mhn_in_folder
+        mhn_out_folder = self.mhn_out_folder
+        hwylink_df = self.hwylink_df 
+
+        import_path = os.path.join(mhn_in_folder, "import_hwyproj_coding.xlsx")
+        import_df = pd.read_excel(import_path)
+
+        import_df = import_df.dropna(how = "all")
+
+        if len(import_df) == 0:
+            return
+
+        # check where tipid, anode, bnode, action is null
+        null_df = import_df[pd.isnull(import_df.tipid) | 
+                            pd.isnull(import_df.anode) |
+                            pd.isnull(import_df.bnode) |
+                            pd.isnull(import_df.action)]
+        
+        import_errors_csv = os.path.join(mhn_out_folder, "import_project_coding_errors.csv")
+
+        if len(null_df) > 0:
+            null_df.to_csv(import_errors_csv, index = False)
+            sys.exit("Row(s) detected where TIPID, ANODE, BNODE, or ACTION is null. Crashing program.")
+
+        import_df = import_df.fillna(0)
+
+        # check where anode + bnode don't correspond to a valid link
+        abb_dict = hwylink_df[["ANODE", "BNODE", "ABB"]].set_index(["ANODE", "BNODE"]).to_dict("index")
+        import_records = import_df.to_dict("records")
+        bad_records = []
+
+        for row in import_records:
+
+            if (row["anode"], row["bnode"]) not in abb_dict:
+                bad_records.append(row)
+
+        if len(bad_records) > 0:
+            bad_records_df = pd.DataFrame(bad_records)
+            bad_records_df.to_csv(import_errors_csv, index = False)
+            sys.exit("Row(s) detected where ANODE and BNODE don't correspond to a valid link. Crashing program.")
+
+        # check where tipid-abb is not unique
+        import_df["abb"] = import_df.apply(lambda x: abb_dict[(x["anode"], x["bnode"])]["ABB"], axis = 1)
+        import_records = import_df.to_dict("records")
+
+        tipid_abb_series = import_df.groupby(["tipid", "abb"]).size()
+        duplicate_combos = tipid_abb_series[tipid_abb_series > 1].to_dict()
+
+        duplicate_records = []
+
+        for row in import_records:
+
+            if (row["tipid"], row["abb"]) in duplicate_combos:
+                duplicate_records.append(row)
+
+        if len(duplicate_records) > 0:
+            duplicate_records_df = pd.DataFrame(duplicate_records)
+            duplicate_records_df.to_csv(import_errors_csv, index = False)
+            sys.exit("Rows detected where TIPID - ABB is not unique. Crashing program.")
+
+        # now add to the table 
+        hwyproj_coding_table = os.path.join(self.current_gdb, "hwyproj_coding")    
+        fields = ["TIPID", "ABB"]
+        existing_list = []
+
+        with arcpy.da.SearchCursor(hwyproj_coding_table, fields) as scursor:
+
+            for row in scursor:
+                existing_list.append((row[0], row[1]))
+
+        delete_rows = []
+        update_rows = []
+        insert_rows = []
+
+        for record in import_records:
+
+            if record["remove"] == "Y":
+                delete_rows.append(record)
+            elif (record["tipid"], record["abb"]) in existing_list:
+                update_rows.append(record)
+            else:
+                insert_rows.append(record)
+
+        print(delete_rows)
+
+        link_fields, lf_dict, coding_fields, cf_dict = self.get_hwy_fields()
+
+    # method that checks the project coding table
+    def check_hwyproj_coding_table(self):
+
+        print("Checking base project table for errors...")
+        
+        mhn_out_folder = self.mhn_out_folder
+        coding_table = os.path.join(self.current_gdb, "hwyproj_coding")
+
+        arcpy.management.CalculateField(coding_table, "USE", "1")
+
+        self.get_hwy_dfs() # update the HN's current dfs 
+
+        hwylink_df = self.hwylink_df
+        coding_df = self.coding_df
+
+        base_project_table_errors = os.path.join(
+            mhn_out_folder, 
+            "base_project_table_errors.txt")
+        error_file= open(base_project_table_errors, "a") # open error file, don't forget to close it!
+
+        # create hwylink data structures now to be compared to later
+        
+        conn_list = hwylink_df[hwylink_df.TYPE1 == "6"].ABB.to_list()
+
+        tipid_list = self.hwyproj_df.TIPID.to_list()
+        abb_list = hwylink_df.ABB.to_list()
+
+        hwylink_abb_df = hwylink_df[["ANODE", "BNODE", "BASELINK", "ABB"]]
+        hwylink_dup_df = pd.merge(hwylink_abb_df, hwylink_abb_df.copy(), left_on = ["ANODE", "BNODE"], right_on = ["BNODE", "ANODE"])
+        hwylink_dup_set = set(hwylink_dup_df.ABB_x.to_list() + hwylink_dup_df.ABB_y.to_list())
+
+        coded_dict, range_dict = self.get_domain_dicts()
+
+        # primary key check
+        # check that no TIPID + ABB is duplicated. 
+        hwyproj_group_df = coding_df.groupby(["TIPID", "ABB"]).size().reset_index()
+        hwyproj_group_df = hwyproj_group_df.rename(columns = {0: "group_size"})
+        hwyproj_dup_dict = hwyproj_group_df[hwyproj_group_df["group_size"] > 1].to_dict("records")
+
+        dup_set = set()
+        for dup in hwyproj_dup_dict: 
+            dup_set.add((dup["TIPID"], dup["ABB"]))
+
+        # don't use the duplicates
+        fields = ["TIPID", "ABB", "USE", "PROCESS_NOTES"]
+        dup_fail = 0
+        with arcpy.da.UpdateCursor(coding_table, fields) as ucursor:
+            for row in ucursor:
+                if (row[0], row[1]) in dup_set:
+                    row[2] = 0
+                    row[3] = "Error: Duplicate TIPID-ABB combination. Must be unique."
+                    dup_fail+=1
+                    ucursor.updateRow(row)
+        
+        error_file.write("Primary key check:\n")
+        if dup_fail != 0:
+            error_file.write(f"{dup_fail} rows failed the duplicate check and had USE set to 0. Check output gdb.\n\n")
+        else:
+            error_file.write("No rows failed the duplicate check.\n\n")
+
+        # check row by row 
+        # don't have to check the validity of already discarded rows
+        # just count the rows with mistakes
+
+        link_fields, lf_dict, coding_fields, cf_dict = self.get_hwy_fields()
+        rev_cf_dict = {cf_dict[k]: k for k in cf_dict.keys()}
+
+        coding_domain_dict = self.get_field_domain_dict(coding_table)
+
+        # get indices of the project coding fields
+        use_pos = cf_dict["USE"]
+        notes_pos = cf_dict["PROCESS_NOTES"]
+
+        row_fail = 0
+        row_warning = 0
+        where_clause = "USE = 1"
+
+        with arcpy.da.UpdateCursor(coding_table, coding_fields, where_clause) as ucursor:
+            for row in ucursor:
+                tipid = row[cf_dict["TIPID"]] 
+                abb = row[cf_dict["ABB"]]
+
+                # check that TIPID is valid 
+                if tipid not in tipid_list: 
+                    row_fail+=1
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: TIPID is not a legitimate project."
+                    ucursor.updateRow(row)
+                    continue
+
+                # check that ABB is valid
+                if abb not in abb_list:
+                    row_fail+=1
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: ABB is not an actual link."
+                    ucursor.updateRow(row)
+                    continue
+
+                # check for domain violations
+                domain_violation = 0
+                for pos in rev_cf_dict:
+
+                    field = rev_cf_dict[pos]
+                    domain = coding_domain_dict[field]
+
+                    if domain in coded_dict:
+                        coded_values = coded_dict[domain]
+                        if row[pos] not in coded_values:
+                            domain_violation += 1
+                    
+                    elif domain in range_dict:
+                        min_val, max_val = range_dict[domain]
+                        if row[pos] < min_val or row[pos] > max_val:
+                            domain_violation += 1
+
+                if domain_violation > 0:
+                    link_fail += 1
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Domain violation"
+                    ucursor.updateRow(row)
+                    continue
+
+                action = row[cf_dict["ACTION_CODE"]]
+
+                # check that action codes are valid
+                baselink = abb[-1]
+                if baselink == "0" and action != "4":
+                    row_fail+=1
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Skeleton links cannot have action codes 1 or 3 applied to them."
+                    ucursor.updateRow(row)
+                    continue
+
+                if baselink == "1" and action not in ["1", "3"]:
+                    row_fail+=1
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Regular links cannot have action code 4 applied to them."
+                    ucursor.updateRow(row)
+                    continue
+
+                ndirs = row[cf_dict["NEW_DIRECTIONS"]]
+                ntype1 = row[cf_dict["NEW_TYPE1"]]
+                ntype2 = row[cf_dict["NEW_TYPE2"]]
+                nampm1 = row[cf_dict["NEW_AMPM1"]]
+                nampm2 = row[cf_dict["NEW_AMPM2"]]
+                nspeed1 = row[cf_dict["NEW_POSTEDSPEED1"]]
+                nspeed2 = row[cf_dict["NEW_POSTEDSPEED2"]]
+                nlanes1 = row[cf_dict["NEW_THRULANES1"]]
+                nlanes2 = row[cf_dict["NEW_THRULANES2"]]
+                nfeet1 = row[cf_dict["NEW_THRULANEWIDTH1"]]
+                nfeet2 = row[cf_dict["NEW_THRULANEWIDTH2"]]
+                aparklanes1 = row[cf_dict["ADD_PARKLANES1"]]
+                aparklanes2 = row[cf_dict["ADD_PARKLANES2"]]
+                cparkres1 = row[cf_dict["CHANGE_PARKRES1"]]
+                cparkres2 = row[cf_dict["CHANGE_PARKRES2"]]
+                abuslanes1 = row[cf_dict["ADD_BUSLANES1"]]
+                abuslanes2 = row[cf_dict["ADD_BUSLANES2"]]
+                asigic = row[cf_dict["ADD_SIGIC"]]
+                acltl = row[cf_dict["ADD_CLTL"]]
+                arrgradex = row[cf_dict["ADD_RRGRADECROSS"]]
+                ntoll = row[cf_dict["NEW_TOLLDOLLARS"]]
+                nmodes = row[cf_dict["NEW_MODES"]]
+                nvclearance = row[cf_dict["NEW_VCLEARANCE"]]
+
+                # check for valid action code = 3
+                attributes = [
+                    ndirs, ntype1, ntype2, nampm1, nampm2, 
+                    nspeed1, nspeed2, nlanes1, nlanes2, nfeet1, nfeet2, 
+                    aparklanes1, aparklanes2, cparkres1, cparkres2, 
+                    abuslanes1, abuslanes2, asigic, acltl, arrgradex, 
+                    ntoll, nmodes, nvclearance]
+
+                if action == "3" and any(str(attribute) != "0" for attribute in attributes):
+                    row_fail+=1
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: Action Code 3 cannot have other attributes filled in."
+                    ucursor.updateRow(row)
+                    continue
+
+                # check for valid toll 
+                try:
+                    static_ntoll = float(ntoll)
+                except:
+                    dynamic_ntoll = ntoll.split()
+
+                    if len(dynamic_ntoll) != 8:
+                        row_fail +=1
+                        row[use_pos] = 0
+                        row[notes_pos] = "Error: Toll must be a decimal or a string of 8 decimals"
+                        ucursor.updateRow(row)
+                        continue
+
+                    try:
+                        dynamic_ntoll = [float(tod_ntoll) for tod_ntoll in dynamic_ntoll]
+                    except:
+                        row_fail += 1
+                        row[use_pos] = 0
+                        row[notes_pos] = "Error: Toll must be a decimal or a string of 8 decimals"
+                        ucursor.updateRow(row)
+                        continue
+
+                # if action code = 4
+                # required attributes must be filled in
+                req_fields = [ndirs, ntype1, nampm1, nlanes1, nfeet1, nmodes]
+                if action == "4":
+                    if any(str(field) == "0" for field in req_fields):
+                        row_fail+=1
+                        row[use_pos] = 0 
+                        row[notes_pos] = "Error: Missing required attribute(s) on new link."
+                        ucursor.updateRow(row)
+                        continue
+                    elif ntype1 != "7" and nspeed1 == 0:
+                        row_fail+=1
+                        row[use_pos] = 0 
+                        row[notes_pos] = "Error: Missing SPEED1 on new link."
+                        ucursor.updateRow(row)
+                        continue
+
+                # if action code = 1 or 4 and directions = 1 or 2
+                # then all 2 fields should be 0 
+                all_fields2 = [ntype2, nampm2, nspeed2, nlanes2, 
+                               nfeet2, aparklanes2, cparkres2, abuslanes2]
+
+                if action in ["1", "4"] and ndirs in ["1", "2"]:
+                    if any(str(field2) != "0" for field2 in all_fields2):
+                        row_fail+=1
+                        row[use_pos] = 0 
+                        row[notes_pos] = f"Error: Unusable '2' attributes on NEW_DIRECTIONS = {ndirs} link."
+                        ucursor.updateRow(row)
+                        continue
+
+                # if action code = 1 or 4 and directions = 3 
+                # then required 2 fields must be filled in
+                req_fields2 = [ntype2, nampm2, nlanes2, nfeet2]
+
+                if action in ["1", "4"] and ndirs == "3":
+                    if any(str(field2) == "0" for field2 in req_fields2):
+                        row_fail+=1
+                        row[use_pos] = 0 
+                        row[notes_pos] = "Error: Missing '2' attributes on NEW_DIRECTIONS = 3 link."
+                        ucursor.updateRow(row)
+                        continue 
+                    elif ntype2 != "7" and nspeed2 == 0:
+                        row_fail+=1
+                        row[use_pos] = 0
+                        row[notes_pos] = "Error: Missing speed 2 on NEW_DIRECTIONS = 3 link."
+                        ucursor.updateRow(row)
+                        continue
+
+                # if link has potential for duplication
+                # cannot set new directions > 1 
+                if ndirs in ["2", "3"] and abb in hwylink_dup_set:
+                    row_fail+=1
+                    row[use_pos] = 0 
+                    row[notes_pos] = "Error: cannot set NEW_DIRECTIONS > to 2 or 3 or else issue with duplication."
+                    ucursor.updateRow(row)
+                    continue
+
+                # centroid connectors should not have project coding 
+                if abb in conn_list:
+                    row_fail +=1
+                    row[use_pos] = 0
+                    row[notes_pos] = "Error: cannot apply coding to centroid connectors."
+                    ucursor.updateRow(row)
+                    continue
+
+                # action code 1 should have at least 1 attribute filled in. 
+                if action == "1" and all(str(attribute) == "0" for attribute in attributes):
+                    row_warning +=1
+                    row[notes_pos] = "Warning: Action Code 1 should make at least one modification."
+                    ucursor.updateRow(row)
+                    continue
+
+            # out of for loop
+
+        # out of cursor
+        error_file.write("Individual row check:\n")
+        if row_fail != 0:
+            error_file.write(f"{row_fail} rows failed the individual row check and had USE set to 0. Check output gdb.\n")
+        else:
+            error_file.write("No rows failed the individual row check.\n")
+
+        if row_warning != 0:
+            error_file.write(f"{row_warning} rows passed the individual row check with warnings. Check output gdb.\n\n")
+        else:
+            error_file.write("\n")
 
     # method that cleans up the output gdbs 
     def finalize_hwy_data(self):
