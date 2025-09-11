@@ -205,7 +205,7 @@ class HighwayNetwork:
                     continue
 
         if node_fail > 0:
-            error_file.write(f"{node_fail} nodes failed the individual row check. Check output gdb.\n")
+            error_file.write(f"{node_fail} nodes failed the individual row check. Check output node fc.\n")
         else:
             error_file.write("No nodes failed the individual row check.\n")
         
@@ -410,7 +410,7 @@ class HighwayNetwork:
                         continue
 
         if link_fail > 0:
-            error_file.write(f"{link_fail} links failed the individual row check. Check output gdb.\n")
+            error_file.write(f"{link_fail} links failed the individual row check. Check output link fc.\n")
         else:
             error_file.write("No links failed the individual row check.\n")
 
@@ -435,6 +435,10 @@ class HighwayNetwork:
         hwylink_df = self.hwylink_df 
 
         import_path = os.path.join(mhn_in_folder, "import_hwyproj_coding.xlsx")
+
+        if not os.path.exists(import_path):
+            return
+
         import_df = pd.read_excel(import_path)
 
         import_df = import_df.dropna(how = "all")
@@ -573,7 +577,7 @@ class HighwayNetwork:
         
         error_file.write("Primary key check:\n")
         if dup_fail != 0:
-            error_file.write(f"{dup_fail} rows failed the duplicate check and had USE set to 0. Check output gdb.\n\n")
+            error_file.write(f"{dup_fail} rows failed the duplicate check and had USE set to 0. Check output coding table.\n\n")
         else:
             error_file.write("No rows failed the duplicate check.\n\n")
 
@@ -795,29 +799,222 @@ class HighwayNetwork:
         # out of cursor
         error_file.write("Individual row check:\n")
         if row_fail != 0:
-            error_file.write(f"{row_fail} rows failed the individual row check and had USE set to 0. Check output gdb.\n")
+            error_file.write(f"{row_fail} rows failed the individual row check and had USE set to 0. Check output coding table.\n")
         else:
             error_file.write("No rows failed the individual row check.\n")
 
         if row_warning != 0:
-            error_file.write(f"{row_warning} rows passed the individual row check with warnings. Check output gdb.\n\n")
+            error_file.write(f"{row_warning} rows passed the individual row check with warnings. Check output coding table.\n\n")
         else:
             error_file.write("\n")
+
+        # row combo check
+        self.get_hwy_dfs()
+
+        coding_df = self.coding_df
+        applied_df = coding_df[(coding_df.COMPLETION_YEAR != 9999) & (coding_df.USE == 1)]
+
+        error_file.write("Row combo check:\n")
+
+        # find links which have multiple actions applied in a single year
+        year_edits_df = applied_df.groupby(["ABB", "COMPLETION_YEAR"]).size().reset_index()
+        year_edits_df = year_edits_df.rename(columns = {0: "group_size"})
+        year_edits_df = year_edits_df[year_edits_df.group_size >= 2]
+
+        year_edits_dict = year_edits_df.set_index(["ABB", "COMPLETION_YEAR"]).to_dict("index")
+        
+        fields = ["ABB", "COMPLETION_YEAR", "PROCESS_NOTES"]
+        with arcpy.da.UpdateCursor(coding_table, fields) as ucursor:
+            for row in ucursor:
+                
+                if (row[0], row[1]) in year_edits_dict:
+
+                    row[2] = f"Warning: Multiple actions were applied to this link in a single year."
+                    ucursor.updateRow(row)
+
+        if len(year_edits_dict) > 0:
+
+            message = f"{len(year_edits_dict)} links exist where multiple actions were applied in a single year. "
+            message += "Check output coding table.\n"
+            error_file.write(message)
+        
+        # find dead skeleton links
+        self.get_hwy_dfs()
+        hwylink_df = self.hwylink_df
+        coding_df = self.coding_df
+
+        skeleton_links_list = hwylink_df[hwylink_df.BASELINK == "0"].ABB.to_list()
+        add_links_set = set(coding_df[coding_df.ACTION_CODE == "4"].ABB.to_list())
+
+        dead_links_list = [link for link in skeleton_links_list if link not in add_links_set]
+
+        hwylink_fc = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
+        fields = ["ABB", "DESCRIPTION"]
+
+        with arcpy.da.UpdateCursor(hwylink_fc, fields) as ucursor:
+            for row in ucursor:
+
+                if row[0] in dead_links_list:
+                    row[1] = "Dead skeleton link is never added."
+                    ucursor.updateRow(row)
+
+        if len(dead_links_list) > 0:
+            message = f"{len(dead_links_list)} skeleton links exist which are never added. "
+            message += "Check output link fc.\n"
+            error_file.write(message)
+
+        error_file.close()
+
+        # write problematic rows to error file
+
+        xl_path = os.path.join(mhn_out_folder, "base_project_table_errors.xlsx")
+
+        rename_dict = {
+            "TIPID": "tipid",
+            "ACTION_CODE" : "action",
+            "NEW_DIRECTIONS" : "directions",
+            "NEW_TYPE1" : "type1",
+            "NEW_TYPE2" : "type2",
+            "NEW_AMPM1" : "ampm1",
+            "NEW_AMPM2" : "ampm2",
+            "NEW_POSTEDSPEED1" : "speed1",
+            "NEW_POSTEDSPEED2" : "speed2",
+            "NEW_THRULANES1" : "lanes1",
+            "NEW_THRULANES2" : "lanes2",
+            "NEW_THRULANEWIDTH1" : "feet1",
+            "NEW_THRULANEWIDTH2" : "feet2",
+            "ADD_PARKLANES1" : "parklanes1",
+            "ADD_PARKLANES2" : "parklanes2",
+            "CHANGE_PARKRES1": "parkres1",
+            "CHANGE_PARKRES2": "parkres2",
+            "ADD_BUSLANES1": "buslanes1",
+            "ADD_BUSLANES2": "buslanes2",
+            "ADD_SIGIC": "sigic",
+            "ADD_CLTL": "cltl",
+            "ADD_RRGRADECROSS": "rrgradex",
+            "NEW_TOLLDOLLARS": "tolldollars",
+            "NEW_MODES": "modes",
+            "NEW_VCLEARANCE": "vclearance"
+        }
+
+        hwyproj_xl_df = coding_df[coding_df.PROCESS_NOTES.notnull()].rename(columns = rename_dict)
+        hwyproj_xl_df["anode"] = hwyproj_xl_df["ABB"].apply(lambda x: x.split("-")[0])
+        hwyproj_xl_df["bnode"] = hwyproj_xl_df["ABB"].apply(lambda x: x.split("-")[1])
+        hwyproj_xl_df["remove"] = None
+
+        hwyproj_xl_df = hwyproj_xl_df.sort_values(["PROCESS_NOTES"])
+        
+        col_order = ["tipid", "anode", "bnode", "action", "directions",
+                     "type1", "type2", "ampm1", "ampm2", "speed1", "speed2", 
+                     "lanes1", "lanes2", "feet1", "feet2",
+                     "parklanes1", "parklanes2", "parkres1", "parkres2",
+                     "buslanes1", "buslanes2", "sigic", "cltl", "rrgradex",
+                     "tolldollars", "modes", "vclearance", "remove",
+                     "ABB", "COMPLETION_YEAR", "PROCESS_NOTES", "USE"]
+        
+        hwyproj_xl_df = hwyproj_xl_df[col_order]
+
+        hwyproj_xl_df.to_excel(xl_path, index = False)
+        print("Base highway project table checked for errors.\n")
 
     # method that cleans up the output gdbs 
     def finalize_hwy_data(self):
 
-        hwynode_fc = os.path.join(self.current_gdb, "hwynet/hwynet_node")
-        hwylink_fc = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
-        hwyproj_fc = os.path.join(self.current_gdb, "hwynet/hwyproj")
-        coding_table = os.path.join(self.current_gdb, "hwyproj_coding")
+        print("Finalizing highway data...")
 
-        arcpy.management.DeleteField(hwynode_fc, ["DESCRIPTION"])
-        arcpy.management.DeleteField(hwylink_fc, ["NEW_BASELINK", "DESCRIPTION", "PROJECT"])
-        arcpy.management.DeleteField(hwyproj_fc, ["DESCRIPTION"])
-        arcpy.management.DeleteField(coding_table, ["COMPLETION_YEAR", "PROCESS_NOTES", "USE"])
+        built_gdbs = self.built_gdbs
+        hwyproj_df = self.hwyproj_df
 
-        self.add_rcs()
+        hwyproj_dict = hwyproj_df.set_index("TIPID").to_dict("index")
+
+        for gdb in built_gdbs:
+            
+            hwylink_fc = os.path.join(gdb, "hwynet/hwynet_arc")
+            hwynode_fc = os.path.join(gdb, "hwynet/hwynet_node")
+            coding_table = os.path.join(gdb, "hwyproj_coding")
+            hwyproj_fc = os.path.join(gdb, "hwynet/hwyproj")
+
+            # remove deleted links
+            # change abb to reflect new baselink
+
+            remaining_nodes = set()
+            abb_to_new_abb = {}
+            fields = ["BASELINK", "NEW_BASELINK", "ANODE", "BNODE", "ABB"]
+
+            with arcpy.da.UpdateCursor(hwylink_fc, fields) as ucursor:
+                for row in ucursor:
+
+                    if row[0] == "1" and row[1] == "0":
+                        abb = row[4]
+                        ucursor.deleteRow()
+
+                    else:
+                        row[0] = row[1] # baselink = new baselink 
+
+                        abb = row[4]
+                        new_abb = f"{row[2]}-{row[3]}-{row[0]}"
+
+                        abb_to_new_abb[abb] = new_abb
+                        remaining_nodes.update([row[2], row[3]])
+
+                        row[4] = new_abb
+                        ucursor.updateRow(row)
+
+            # delete nodes which are not connected to links
+            with arcpy.da.UpdateCursor(hwynode_fc, ["NODE"]) as ucursor:
+                for row in ucursor:
+
+                    if row[0] not in remaining_nodes:
+                        ucursor.deleteRow()
+
+            # in project table, drop use = 0 
+            # else, update its abb
+            fields = ["USE", "ABB"]
+            with arcpy.da.UpdateCursor(coding_table, fields) as ucursor:
+                for row in ucursor:
+
+                    # if row[0] == 0 or row[1] in deleted_links:
+                    if row[0] == 0:
+                        ucursor.deleteRow()
+
+                    else:
+                        abb = row[1]
+                        row[1] = abb_to_new_abb[abb]
+                        ucursor.updateRow(row)
+
+            # make an fc of the remaining projects
+            arcpy.management.CreateFeatureclass(gdb, "coding_remaining", "POLYLINE", spatial_reference = 26771)
+            coding_remaining = os.path.join(gdb, "coding_remaining")
+            arcpy.management.AddFields(coding_remaining, [["TIPID", "TEXT"], ["ABB", "TEXT"]])
+
+            with arcpy.da.SearchCursor(coding_table, ["TIPID", "ABB"]) as scursor:
+                with arcpy.da.InsertCursor(coding_remaining, ["TIPID", "ABB"]) as icursor:
+
+                    for row in scursor:
+                        icursor.insertRow(row)
+
+            geom_fields = ["SHAPE@", "ABB"]
+            with arcpy.da.UpdateCursor(coding_remaining, geom_fields) as ucursor:
+                for u_row in ucursor:
+
+                    abb = u_row[1]
+
+                    geom = None
+                    where_clause = f"ABB = '{abb}'"
+
+                    with arcpy.da.SearchCursor(hwylink_fc, geom_fields, where_clause) as scursor:
+                        for s_row in scursor:
+
+                            geom = s_row[0]
+                            
+                    ucursor.updateRow([geom, abb])
+            
+            arcpy.management.DeleteField(hwynode_fc, ["DESCRIPTION"])
+            arcpy.management.DeleteField(hwylink_fc, ["NEW_BASELINK", "DESCRIPTION", "PROJECT"])
+            arcpy.management.DeleteField(hwyproj_fc, ["DESCRIPTION"])
+            arcpy.management.DeleteField(coding_table, ["COMPLETION_YEAR", "PROCESS_NOTES", "USE"])
+            
+            self.add_rcs()
 
     # HELPER METHODS ------------------------------------------------------------------------------
 

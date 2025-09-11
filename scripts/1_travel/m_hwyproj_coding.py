@@ -5,8 +5,6 @@
 
 from modules.HN import HighwayNetwork
 
-import os
-import sys
 import argparse
 import math
 import time
@@ -20,20 +18,14 @@ if __name__ == "__main__":
                         action="store_true")
     args = parser.parse_args()
 
-    # check for import file
-    sys_path = sys.argv[0]
-    abs_path = os.path.abspath(sys_path)
-    mfhrn_path = os.path.dirname(os.path.dirname(os.path.dirname(abs_path)))
-    import_path = os.path.join(mfhrn_path, "input", "1_travel", "import_hwyproj_coding.xlsx")
-
-    if not os.path.exists(import_path):
-        sys.exit("Please provide a file of the project coding to import as import_hwyproj_coding.xlsx.")
-
     # import highway project coding
     HN = HighwayNetwork()
     HN.create_base_year()
     HN.check_hwy_fcs()
     HN.import_hwyproj_coding()
+    HN.check_hwyproj_coding_table()
+    if args.final:
+        HN.finalize_hwy_data()
 
     end_time = time.time()
     total_time = round(end_time - start_time)
