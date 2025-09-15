@@ -497,29 +497,123 @@ class HighwayNetwork:
             sys.exit("Rows detected where TIPID - ABB is not unique. Crashing program.")
 
         # now add to the table 
-        hwyproj_coding_table = os.path.join(self.current_gdb, "hwyproj_coding")    
+        coding_table = os.path.join(self.current_gdb, "hwyproj_coding")    
         fields = ["TIPID", "ABB"]
         existing_list = []
 
-        with arcpy.da.SearchCursor(hwyproj_coding_table, fields) as scursor:
+        with arcpy.da.SearchCursor(coding_table, fields) as scursor:
 
             for row in scursor:
                 existing_list.append((row[0], row[1]))
 
         delete_rows = []
-        update_rows = []
+        update_rows = {}
         insert_rows = []
 
         for record in import_records:
+            tipid = record["tipid"]
+            abb = record["abb"]
 
             if record["remove"] == "Y":
-                delete_rows.append(record)
-            elif (record["tipid"], record["abb"]) in existing_list:
-                update_rows.append(record)
+                delete_rows.append((tipid, abb))
+            elif (tipid, abb) in existing_list:
+                update_rows[(tipid, abb)] = record
             else:
                 insert_rows.append(record)
 
         link_fields, lf_dict, coding_fields, cf_dict = self.get_hwy_fields()
+
+        # update and delete rows
+        with arcpy.da.UpdateCursor(coding_table, coding_fields) as ucursor:
+            for row in ucursor:
+                    
+                tipid = row[cf_dict["TIPID"]]
+                abb = row[cf_dict["ABB"]]
+
+                if (tipid, abb) in update_rows:
+
+                    new_attrs = update_rows[tipid, abb]
+                    row[cf_dict["ACTION_CODE"]] = new_attrs["action"]
+                    row[cf_dict["NEW_DIRECTIONS"]] = new_attrs["directions"]
+                    row[cf_dict["NEW_TYPE1"]] = new_attrs["type1"]
+                    row[cf_dict["NEW_TYPE2"]] = new_attrs["type2"]
+                    row[cf_dict["NEW_AMPM1"]] = new_attrs["ampm1"]
+                    row[cf_dict["NEW_AMPM2"]] = new_attrs["ampm2"]
+                    row[cf_dict["NEW_POSTEDSPEED1"]] = new_attrs["speed1"]
+                    row[cf_dict["NEW_POSTEDSPEED2"]] = new_attrs["speed2"]
+                    row[cf_dict["NEW_THRULANES1"]] = new_attrs["lanes1"]
+                    row[cf_dict["NEW_THRULANES2"]] = new_attrs["lanes2"]
+                    row[cf_dict["NEW_THRULANEWIDTH1"]] = new_attrs["feet1"]
+                    row[cf_dict["NEW_THRULANEWIDTH2"]] = new_attrs["feet2"]
+                    row[cf_dict["ADD_PARKLANES1"]] = new_attrs["parklanes1"]
+                    row[cf_dict["ADD_PARKLANES2"]] = new_attrs["parklanes2"]
+                    row[cf_dict["CHANGE_PARKRES1"]] = new_attrs["parkres1"]
+                    row[cf_dict["CHANGE_PARKRES2"]] = new_attrs["parkres2"]
+                    row[cf_dict["ADD_BUSLANES1"]] = new_attrs["buslanes1"]
+                    row[cf_dict["ADD_BUSLANES2"]] = new_attrs["buslanes2"]
+                    row[cf_dict["ADD_SIGIC"]] = new_attrs["sigic"]
+                    row[cf_dict["ADD_CLTL"]] = new_attrs["cltl"]
+                    row[cf_dict["ADD_RRGRADECROSS"]] = new_attrs["rrgradex"]
+                    row[cf_dict["NEW_TOLLDOLLARS"]] = new_attrs["tolldollars"]
+                    row[cf_dict["NEW_MODES"]] = new_attrs["modes"]
+                    row[cf_dict["NEW_VCLEARANCE"]] = new_attrs["vclearance"]
+                    row[cf_dict["PROCESS_NOTES"]] = "Updated from import successfully."
+
+                    ucursor.updateRow(row)
+
+                elif (tipid, abb) in delete_rows:
+                    ucursor.deleteRow()
+        
+        # insert rows
+        # have to calculate completion year
+        hwyproj_df = self.hwyproj_df
+        years_dict = hwyproj_df.set_index("TIPID")["COMPLETION_YEAR"].to_dict()
+
+        with arcpy.da.InsertCursor(coding_table, coding_fields) as icursor:
+
+            for new_attrs in insert_rows:
+
+                row = [None] * len(coding_fields)
+
+                tipid = new_attrs["tipid"]
+
+                row[cf_dict["TIPID"]] = tipid
+                row[cf_dict["ABB"]] = new_attrs["abb"]
+                row[cf_dict["ACTION_CODE"]] = new_attrs["action"]
+                row[cf_dict["NEW_DIRECTIONS"]] = new_attrs["directions"]
+                row[cf_dict["NEW_TYPE1"]] = new_attrs["type1"]
+                row[cf_dict["NEW_TYPE2"]] = new_attrs["type2"]
+                row[cf_dict["NEW_AMPM1"]] = new_attrs["ampm1"]
+                row[cf_dict["NEW_AMPM2"]] = new_attrs["ampm2"]
+                row[cf_dict["NEW_POSTEDSPEED1"]] = new_attrs["speed1"]
+                row[cf_dict["NEW_POSTEDSPEED2"]] = new_attrs["speed2"]
+                row[cf_dict["NEW_THRULANES1"]] = new_attrs["lanes1"]
+                row[cf_dict["NEW_THRULANES2"]] = new_attrs["lanes2"]
+                row[cf_dict["NEW_THRULANEWIDTH1"]] = new_attrs["feet1"]
+                row[cf_dict["NEW_THRULANEWIDTH2"]] = new_attrs["feet2"]
+                row[cf_dict["ADD_PARKLANES1"]] = new_attrs["parklanes1"]
+                row[cf_dict["ADD_PARKLANES2"]] = new_attrs["parklanes2"]
+                row[cf_dict["CHANGE_PARKRES1"]] = new_attrs["parkres1"]
+                row[cf_dict["CHANGE_PARKRES2"]] = new_attrs["parkres2"]
+                row[cf_dict["ADD_BUSLANES1"]] = new_attrs["buslanes1"]
+                row[cf_dict["ADD_BUSLANES2"]] = new_attrs["buslanes2"]
+                row[cf_dict["ADD_SIGIC"]] = new_attrs["sigic"]
+                row[cf_dict["ADD_CLTL"]] = new_attrs["cltl"]
+                row[cf_dict["ADD_RRGRADECROSS"]] = new_attrs["rrgradex"]
+                row[cf_dict["NEW_TOLLDOLLARS"]] = new_attrs["tolldollars"]
+                row[cf_dict["NEW_MODES"]] = new_attrs["modes"]
+                row[cf_dict["NEW_VCLEARANCE"]] = new_attrs["vclearance"]
+                
+                if tipid in years_dict:
+                    row[cf_dict["COMPLETION_YEAR"]] = years_dict[tipid]
+                else:
+                    row[cf_dict["COMPLETION_YEAR"]] = 0
+
+                row[cf_dict["PROCESS_NOTES"]] = "Inserted from import successfully"
+
+                icursor.insertRow(row)
+
+        print("Highway project coding imported.\n")
 
     # method that checks the project coding table
     def check_hwyproj_coding_table(self):
@@ -539,6 +633,10 @@ class HighwayNetwork:
         base_project_table_errors = os.path.join(
             mhn_out_folder, 
             "base_project_table_errors.txt")
+        
+        if os.path.exists(base_project_table_errors):
+            os.remove(base_project_table_errors)
+
         error_file= open(base_project_table_errors, "a") # open error file, don't forget to close it!
 
         # create hwylink data structures now to be compared to later
