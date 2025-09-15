@@ -68,8 +68,8 @@ class HighwayNetwork:
         
     # MAIN METHODS --------------------------------------------------------------------------------
 
-    # method that creates base year gdb
-    def create_base_year(self):
+    # method that creates base hwy gdb
+    def create_base_hwy(self):
 
         print("Copying base year...")
 
@@ -437,6 +437,7 @@ class HighwayNetwork:
         import_path = os.path.join(mhn_in_folder, "import_hwyproj_coding.xlsx")
 
         if not os.path.exists(import_path):
+            print("No highway projects imported. Checking base table for integrity.\n")
             return
 
         import_df = pd.read_excel(import_path)
@@ -444,6 +445,7 @@ class HighwayNetwork:
         import_df = import_df.dropna(how = "all")
 
         if len(import_df) == 0:
+            print("No highway projects imported. Checking base table for integrity.\n")
             return
 
         # check where tipid, anode, bnode, action is null
@@ -516,8 +518,6 @@ class HighwayNetwork:
                 update_rows.append(record)
             else:
                 insert_rows.append(record)
-
-        print(delete_rows)
 
         link_fields, lf_dict, coding_fields, cf_dict = self.get_hwy_fields()
 
@@ -923,9 +923,6 @@ class HighwayNetwork:
         print("Finalizing highway data...")
 
         built_gdbs = self.built_gdbs
-        hwyproj_df = self.hwyproj_df
-
-        hwyproj_dict = hwyproj_df.set_index("TIPID").to_dict("index")
 
         for gdb in built_gdbs:
             
@@ -1009,12 +1006,53 @@ class HighwayNetwork:
                             
                     ucursor.updateRow([geom, abb])
             
+            # dissolve projects and get geometries
+            hwyproj_dissolve = os.path.join(gdb, "hwyproj_dissolve")
+            arcpy.management.Dissolve(coding_remaining, hwyproj_dissolve, ["TIPID"])
+
+            geom_dict = {}
+
+            with arcpy.da.SearchCursor(hwyproj_dissolve, ["TIPID", "SHAPE@"]) as scursor:
+                for row in scursor:
+                    
+                    tipid = row[0]
+                    geom = row[1]
+
+                    multi_array = arcpy.Array()
+                    for part in geom:
+                        
+                        part_array = arcpy.Array([point for point in part])
+                        multi_array.append(part_array)
+
+                    polyline = arcpy.Polyline(multi_array, spatial_reference = 26771)
+                    geom_dict[tipid] = polyline
+
+            # in original hwyproj fc, drop if deleted
+            # else update its geometry
+
+            with arcpy.da.UpdateCursor(hwyproj_fc, ["TIPID", "SHAPE@"]) as ucursor:
+                for row in ucursor:
+
+                    tipid = row[0]
+
+                    if tipid in geom_dict:
+                        row[1] = geom_dict[tipid]
+                        ucursor.updateRow(row)
+
+                    else:
+                        ucursor.deleteRow()
+
+            arcpy.management.Delete(coding_remaining)
+            arcpy.management.Delete(hwyproj_dissolve)
+            
             arcpy.management.DeleteField(hwynode_fc, ["DESCRIPTION"])
             arcpy.management.DeleteField(hwylink_fc, ["NEW_BASELINK", "DESCRIPTION", "PROJECT"])
             arcpy.management.DeleteField(hwyproj_fc, ["DESCRIPTION"])
             arcpy.management.DeleteField(coding_table, ["COMPLETION_YEAR", "PROCESS_NOTES", "USE"])
             
             self.add_rcs()
+
+            print("Highway data finalized.\n")
 
     # HELPER METHODS ------------------------------------------------------------------------------
 

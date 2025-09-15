@@ -32,7 +32,7 @@ if __name__ == "__main__":
 
     # build highway networks
     HN = HighwayNetwork()
-    HN.create_base_year()
+    HN.create_base_hwy()
     HN.check_hwy_fcs()
     HN.check_hwyproj_coding_table()
 

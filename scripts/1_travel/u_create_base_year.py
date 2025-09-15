@@ -11,7 +11,7 @@ if __name__ == "__main__":
     start_time = time.time()
 
     HN = HighwayNetwork()
-    HN.create_base_year()
+    HN.create_base_hwy()
 
     end_time = time.time()
     total_time = round(end_time - start_time)
