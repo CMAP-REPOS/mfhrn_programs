@@ -35,6 +35,7 @@ if __name__ == "__main__":
     HN.create_base_hwy()
     HN.check_hwy_fcs()
     HN.check_hwyproj_coding_table()
+    HN.build_future_hwys(subset = args.subset)
 
     end_time = time.time()
     total_time = round(end_time - start_time)

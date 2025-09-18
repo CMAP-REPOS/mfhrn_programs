@@ -33,6 +33,25 @@ class HighwayNetwork:
         years_csv_path = os.path.join(self.in_folder, "input_years.csv")
         years_list_raw = pd.read_csv(years_csv_path)["year"].to_list()
 
+        # highway files - names of feature classes + tables in MHN
+        self.hwy_files = [
+            "hwynet/hwynet_arc",
+            "hwynet/hwynet_node",
+            "hwynet/hwyproj",
+            "hwyproj_coding"
+            ]
+        
+        # bus files - names of feature classes + tables in MHN
+        self.bus_files = [
+            "hwynet/bus_base",
+            "hwynet/bus_current",
+            "hwynet/bus_future",
+            "bus_base_itin",
+            "bus_current_itin",
+            "bus_future_itin",
+            "parknride" # not totally sure what this is. 
+        ]
+
         self.rel_classes = [
             "rel_hwyproj_to_coding",
             "rel_arcs_to_hwyproj_coding",
@@ -652,6 +671,9 @@ class HighwayNetwork:
 
         coded_dict, range_dict = self.get_domain_dicts()
 
+        # wipe Process Notes field
+        arcpy.management.CalculateField(coding_table, "PROCESS_NOTES", '" "', "PYTHON3")
+
         # primary key check
         # check that no TIPID + ABB is duplicated. 
         hwyproj_group_df = coding_df.groupby(["TIPID", "ABB"]).size().reset_index()
@@ -1015,6 +1037,22 @@ class HighwayNetwork:
         hwyproj_xl_df.to_excel(xl_path, index = False)
         print("Base highway project table checked for errors.\n")
 
+    # method that builds future highways
+    def build_future_hwys(self, subset = False, build_years = None):
+
+        mhn_out_folder = self.mhn_out_folder
+
+        if build_years == None: 
+            build_years = self.years_list.copy()
+
+        if self.base_year in build_years:
+            build_years.remove(self.base_year)
+
+        if subset == True:
+            self.subset_to_projects()
+
+        self.create_combined_gdb()
+
     # method that cleans up the output gdbs 
     def finalize_hwy_data(self):
 
@@ -1246,6 +1284,132 @@ class HighwayNetwork:
                 range_dict[domain.name] = domain.range
 
         return coded_dict, range_dict
+
+    # helper method that subsets to certain projects
+    def subset_to_projects(self):
+
+        print("Subsetting to projects...")
+
+        mhn_in_folder = self.mhn_in_folder
+        subset_hwy_path = os.path.join(mhn_in_folder, "subset_hwy_projects.csv")
+
+        subset_df = pd.read_csv(subset_hwy_path).drop_duplicates()
+
+        all_tipid_list = subset_df[subset_df.ABB == "all"].TIPID.to_list()
+        spec_abb_list = list(subset_df[subset_df.ABB != "all"].set_index(["TIPID", "ABB"]).index.values)
+
+        coding_table = os.path.join(self.current_gdb, "hwyproj_coding")
+
+        fields = ["TIPID", "ABB", "USE"]
+
+        with arcpy.da.UpdateCursor(coding_table, fields) as ucursor:
+            for row in ucursor:
+
+                tipid = row[0]
+                abb = row[1]
+
+                tipid_abb = (tipid, abb)
+                
+                if tipid not in all_tipid_list and tipid_abb not in spec_abb_list:
+                    row[2] = 0
+                    ucursor.updateRow(row)
+
+        print("Subset complete.\n")
+
+    # helper method that copies highway links into the combined gdb
+    def copy_hwy_links(self):
+
+        mhn_out_folder = self.mhn_out_folder
+        mhn_all_name = "MHN_all.gdb"
+        mhn_all_gdb = os.path.join(mhn_out_folder, mhn_all_name)
+
+        hwylink_fc = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
+        link_workspace = os.path.join(mhn_all_gdb, "hwylinks_all")
+
+        base_links_name = f"HWYLINK_{self.base_year}"
+        arcpy.management.CreateFeatureclass(link_workspace, base_links_name, template = hwylink_fc, spatial_reference = 26771)
+        base_links = os.path.join(link_workspace, base_links_name)
+
+        link_fields = [f.name for f in arcpy.ListFields(hwylink_fc) if f.name != "OBJECTID" and f.type != "Geometry"]
+        link_fields += ["SHAPE@"]
+
+        with arcpy.da.SearchCursor(hwylink_fc, link_fields) as scursor:
+            with arcpy.da.InsertCursor(base_links, link_fields) as icursor:
+
+                for row in scursor:
+                    icursor.insertRow(row)
+
+    # helper method that creates a gdb of all built years 
+    def create_combined_gdb(self):
+
+        print("Creating combined gdb...")
+
+        final_year = max(self.years_list)
+        mhn_out_folder = self.mhn_out_folder
+
+        # create a combined gdb to store + check final output 
+        mhn_all_gdb = os.path.join(mhn_out_folder, "MHN_all.gdb")
+        self.copy_gdb_safe(self.current_gdb, mhn_all_gdb)
+
+        for file in (self.hwy_files + self.bus_files):
+            arcpy.management.Delete(os.path.join(mhn_all_gdb, file))
+        arcpy.management.Delete(os.path.join(mhn_all_gdb, "hwynet"))
+
+        # copy relevant project coding
+        coding_table = os.path.join(self.current_gdb, "hwyproj_coding")
+        applied_table = os.path.join(mhn_all_gdb, "coding_applied")
+
+        where_clause = f"USE = 1 AND COMPLETION_YEAR <= {final_year}"
+        arcpy.management.MakeTableView(coding_table, "coding_view", where_clause)
+        arcpy.management.CopyRows("coding_view", applied_table)
+
+        # create table of links which had multiple actions applied 
+        multiple_table = os.path.join(mhn_all_gdb, "coding_multiple")
+        arcpy.management.Sort(applied_table, multiple_table, "COMPLETION_YEAR")
+
+        coding_df = self.coding_df 
+        coding_df_use = coding_df[(coding_df.USE == 1) & (coding_df.COMPLETION_YEAR <= final_year)]
+        multiple_dict = coding_df_use.ABB.value_counts()[coding_df_use.ABB.value_counts() >= 2].to_dict()
+
+        with arcpy.da.UpdateCursor(multiple_table, "ABB") as ucursor:
+            for row in ucursor:
+
+                if row[0] not in multiple_dict:
+                    ucursor.deleteRow()
+
+        # copy the nodes 
+        hwynode_fc = os.path.join(self.current_gdb, "hwynet/hwynet_node")
+        arcpy.management.CreateFeatureclass(mhn_all_gdb, "hwynode_all", template = hwynode_fc, spatial_reference = 26771)
+        hwynode_all = os.path.join(mhn_all_gdb, "hwynode_all")
+
+        hwynode_fields = [f.name for f in arcpy.ListFields(hwynode_fc) if f.name != "OBJECTID" and f.type != "Geometry"]
+        hwynode_fields += ["SHAPE@XY"]
+
+        with arcpy.da.SearchCursor(hwynode_fc, hwynode_fields) as scursor:
+            with arcpy.da.InsertCursor(hwynode_all, hwynode_fields) as icursor:
+
+                for row in scursor:
+                    icursor.insertRow(row)
+
+        # create a feature dataset to store the links 
+        # then copy over the base links
+        arcpy.management.CreateFeatureDataset(mhn_all_gdb, "hwylinks_all", spatial_reference = 26771)
+        self.copy_hwy_links()
+
+        # add relationship classes for ease of checking
+        base_links_fc = os.path.join(mhn_all_gdb, "hwylinks_all", f"HWYLINK_{self.base_year}")
+        rel_arcs_to_applied = os.path.join(mhn_all_gdb, "rel_arcs_to_applied")
+        rel_arcs_to_multiple = os.path.join(mhn_all_gdb, "rel_arcs_to_multiple")
+
+        arcpy.management.CreateRelationshipClass(
+            base_links_fc, applied_table, rel_arcs_to_applied,
+            "SIMPLE", "coding_applied", "base_arcs", "NONE", "ONE_TO_MANY", 
+            "NONE", "ABB", "ABB")
+        
+        arcpy.management.CreateRelationshipClass(
+            base_links_fc, multiple_table, rel_arcs_to_multiple,
+            "SIMPLE", "coding_multiple", "base_arcs", "NONE", "ONE_TO_MANY", 
+            "NONE", "ABB", "ABB")
 
     # helper method to add relationship classes
     def add_rcs(self):
