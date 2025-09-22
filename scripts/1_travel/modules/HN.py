@@ -105,9 +105,9 @@ class HighwayNetwork:
         os.mkdir(mhn_out_folder)
 
         # copy GDB
-        out_gdb = os.path.join(mhn_out_folder, f"MHN_{base_year}.gdb")
-        self.copy_gdb_safe(mhn_in_gdb, out_gdb)
-        self.current_gdb = out_gdb # !!! update the HN's current gdb
+        mhn_out_gdb = os.path.join(mhn_out_folder, f"MHN_{base_year}.gdb")
+        self.copy_gdb_safe(mhn_in_gdb, mhn_out_gdb)
+        self.current_gdb = mhn_out_gdb # !!! update the HN's current gdb
 
         self.built_gdbs.append(self.current_gdb)
         self.del_rcs()
@@ -1053,6 +1053,25 @@ class HighwayNetwork:
 
         self.create_combined_gdb()
 
+        # build the future highways 
+        for build_year in build_years:
+
+            print(f"Building highway network for {build_year}...")
+            next_gdb = os.path.join(mhn_out_folder, f"MHN_{build_year}.gdb")
+            self.copy_gdb_safe(self.current_gdb, next_gdb)
+            self.current_gdb = next_gdb
+
+            for year in range(self.base_year, build_year):
+                self.hwy_forward_one_year()
+
+            # copy built links into combined gdb 
+            self.copy_hwy_links()
+
+            # add the built gdb into the list of built gdbs
+            self.built_gdbs.append(self.current_gdb)
+
+        print("All years built.\n")
+
     # method that cleans up the output gdbs 
     def finalize_hwy_data(self):
 
@@ -1410,6 +1429,361 @@ class HighwayNetwork:
             base_links_fc, multiple_table, rel_arcs_to_multiple,
             "SIMPLE", "coding_multiple", "base_arcs", "NONE", "ONE_TO_MANY", 
             "NONE", "ABB", "ABB")
+
+    # helper method that moves the base year up one year
+    def hwy_forward_one_year(self):
+        
+        current_year = self.base_year + 1 
+
+        self.get_hwy_dfs()
+        coding_df = self.coding_df[self.coding_df.USE == 1] # Only want the valid projects
+
+        year_projects = coding_df[coding_df.COMPLETION_YEAR == current_year]
+        year_projects = year_projects.set_index(["TIPID", "ABB"]).drop(columns = ["USE", "PROCESS_NOTES"])
+        action_1_dict = year_projects[year_projects.ACTION_CODE == "1"].to_dict("index")
+        action_3_dict = year_projects[year_projects.ACTION_CODE == "3"].to_dict("index")
+        action_4_dict = year_projects[year_projects.ACTION_CODE == "4"].to_dict("index")
+
+        # these fields will change
+        hwylink_fc = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
+        coding_table = os.path.join(self.current_gdb, "hwyproj_coding")
+
+        link_fields, lf_dict, coding_fields, cf_dict = self.get_hwy_fields()
+
+        # get indices of the highway link fields
+        dirs_pos = lf_dict["DIRECTIONS"]
+        type1_pos = lf_dict["TYPE1"]
+        type2_pos = lf_dict["TYPE2"]
+        ampm1_pos = lf_dict["AMPM1"]
+        ampm2_pos = lf_dict["AMPM2"]
+        speed1_pos = lf_dict["POSTEDSPEED1"]
+        speed2_pos = lf_dict["POSTEDSPEED2"]
+        lanes1_pos = lf_dict["THRULANES1"]
+        lanes2_pos = lf_dict["THRULANES2"]
+        feet1_pos = lf_dict["THRULANEWIDTH1"]
+        feet2_pos = lf_dict["THRULANEWIDTH2"]
+        parklanes1_pos = lf_dict["PARKLANES1"]
+        parklanes2_pos = lf_dict["PARKLANES2"]
+        parkres1_pos = lf_dict["PARKRES1"]
+        parkres2_pos = lf_dict["PARKRES2"]
+        buslanes1_pos = lf_dict["BUSLANES1"]
+        buslanes2_pos = lf_dict["BUSLANES2"]
+        sigic_pos = lf_dict["SIGIC"]
+        cltl_pos = lf_dict["CLTL"]
+        rrgradex_pos = lf_dict["RRGRADECROSS"]
+        toll_pos = lf_dict["TOLLDOLLARS"]
+        modes_pos = lf_dict["MODES"]
+        vclearance_pos = lf_dict["VCLEARANCE"]
+        nbaselink_pos = lf_dict["NEW_BASELINK"]
+        proj_pos = lf_dict["PROJECT"]
+        desc_pos = lf_dict["DESCRIPTION"]
+
+        # get indices of the project coding fields
+        action_pos = cf_dict["ACTION_CODE"]
+        ndirs_pos = cf_dict["NEW_DIRECTIONS"]
+        ntype1_pos = cf_dict["NEW_TYPE1"]
+        ntype2_pos = cf_dict["NEW_TYPE2"]
+        nampm1_pos = cf_dict["NEW_AMPM1"]
+        nampm2_pos = cf_dict["NEW_AMPM2"]
+        nspeed1_pos = cf_dict["NEW_POSTEDSPEED1"]
+        nspeed2_pos = cf_dict["NEW_POSTEDSPEED2"]
+        nlanes1_pos = cf_dict["NEW_THRULANES1"]
+        nlanes2_pos = cf_dict["NEW_THRULANES2"]
+        nfeet1_pos = cf_dict["NEW_THRULANEWIDTH1"]
+        nfeet2_pos = cf_dict["NEW_THRULANEWIDTH2"]
+        aparklanes1_pos = cf_dict["ADD_PARKLANES1"]
+        aparklanes2_pos = cf_dict["ADD_PARKLANES2"]
+        cparkres1_pos = cf_dict["CHANGE_PARKRES1"]
+        cparkres2_pos = cf_dict["CHANGE_PARKRES2"]
+        abuslanes1_pos = cf_dict["ADD_BUSLANES1"]
+        abuslanes2_pos = cf_dict["ADD_BUSLANES2"]
+        asigic_pos = cf_dict["ADD_SIGIC"]
+        acltl_pos = cf_dict["ADD_CLTL"]
+        arrgradex_pos = cf_dict["ADD_RRGRADECROSS"]
+        ntoll_pos = cf_dict["NEW_TOLLDOLLARS"]
+        nmodes_pos = cf_dict["NEW_MODES"]
+        nvclearance_pos = cf_dict["NEW_VCLEARANCE"]
+        notes_pos = cf_dict["PROCESS_NOTES"]
+
+        if len(action_1_dict) > 0:
+
+            for action in action_1_dict:
+
+                project = action[0]
+                abb = action[1]
+
+                edits = action_1_dict[action]
+                ndirs = edits["NEW_DIRECTIONS"]
+                ntype1 = edits["NEW_TYPE1"]
+                ntype2 = edits["NEW_TYPE2"]
+                nampm1 = edits["NEW_AMPM1"]
+                nampm2 = edits["NEW_AMPM2"]
+                nspeed1 = edits["NEW_POSTEDSPEED1"]
+                nspeed2 = edits["NEW_POSTEDSPEED2"]
+                nlanes1 = edits["NEW_THRULANES1"]
+                nlanes2 = edits["NEW_THRULANES2"]
+                nfeet1 = edits["NEW_THRULANEWIDTH1"]
+                nfeet2 = edits["NEW_THRULANEWIDTH2"]
+                aparklanes1 = edits["ADD_PARKLANES1"]
+                aparklanes2 = edits["ADD_PARKLANES2"]
+                cparkres1 = edits["CHANGE_PARKRES1"]
+                cparkres2 = edits["CHANGE_PARKRES2"]
+                abuslanes1 = edits["ADD_BUSLANES1"]
+                abuslanes2 = edits["ADD_BUSLANES2"]
+                asigic = edits["ADD_SIGIC"]
+                acltl = edits["ADD_CLTL"]
+                arrgradex = edits["ADD_RRGRADECROSS"]
+                ntoll = edits["NEW_TOLLDOLLARS"]
+                nmodes = edits["NEW_MODES"]
+                nvclearance = edits["NEW_VCLEARANCE"]
+
+                where_clause = f"ABB = '{abb}'"
+                with arcpy.da.UpdateCursor(hwylink_fc, link_fields, where_clause) as ucursor:
+                    for row in ucursor:
+
+                        row[dirs_pos] = ndirs if ndirs != "0" else row[dirs_pos]
+                        row[type1_pos] = ntype1 if ntype1 != "0" else row[type1_pos]
+                        row[type2_pos] = ntype2 if ntype2 != "0" else row[type2_pos]
+                        row[ampm1_pos] = nampm1 if nampm1 != "0" else row[ampm1_pos]
+                        row[ampm2_pos] = nampm2 if nampm2 != "0" else row[ampm2_pos]
+                        row[speed1_pos] = nspeed1 if nspeed1 != 0 else row[speed1_pos]
+                        row[speed2_pos] = nspeed2 if nspeed2 != 0 else row[speed2_pos]
+                        row[lanes1_pos] = nlanes1 if nlanes1 != 0 else row[lanes1_pos]
+                        row[lanes2_pos] = nlanes2 if nlanes2 != 0 else row[lanes2_pos]
+                        row[feet1_pos] = nfeet1 if nfeet1 != 0 else row[feet1_pos]
+                        row[feet2_pos] = nfeet2 if nfeet2 != 0 else row[feet2_pos]
+                        row[parklanes1_pos] = max((row[parklanes1_pos] + aparklanes1), 0)
+                        row[parklanes2_pos] = max((row[parklanes2_pos] + aparklanes2), 0)
+                        row[parkres1_pos] = cparkres1 if cparkres1 != "0" else row[parkres1_pos]
+                        row[parkres2_pos] = cparkres2 if cparkres2 != "0" else row[parkres2_pos]
+                        row[buslanes1_pos] = min(max((row[buslanes1_pos] + abuslanes1), 0), 1)
+                        row[buslanes2_pos] = min(max((row[buslanes2_pos] + abuslanes2), 0), 1)
+                        row[sigic_pos] = min(max((row[sigic_pos] + asigic), 0), 1)
+                        row[cltl_pos] = min(max((row[cltl_pos] + acltl), 0), 1)
+                        row[rrgradex_pos] = min(max((row[rrgradex_pos] + arrgradex), 0), 1)
+
+                        if ntoll != "0":
+                            row[toll_pos] = ntoll 
+                        if ntoll == "-1":
+                            row[toll_pos] = "0"
+
+                        row[modes_pos] = nmodes if nmodes != "0" else row[modes_pos]
+
+                        if nvclearance != 0:
+                            row[vclearance_pos] = nvclearance
+                        if nvclearance == -1:
+                            row[vclearance_pos] = 0
+
+                        row[proj_pos] = project
+                        row[desc_pos] = f"Modified in {current_year}"
+
+                        # if directions = 1 or 2
+                        # empty all "2" fields
+                        if row[dirs_pos] in ["1", "2"]:
+                            row[type2_pos] = "0"
+                            row[ampm2_pos] = "0"
+                            row[speed2_pos] = 0
+                            row[lanes2_pos] = 0
+                            row[feet2_pos] = 0
+                            row[parklanes2_pos] = 0
+                            row[buslanes2_pos] = 0
+
+                        # if directions = 1 remove parkres2
+                        if row[dirs_pos] == "1":
+                            row[parkres2_pos] = "-"
+
+                        ucursor.updateRow(row)
+
+                where_clause = "USE = 1"
+                where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
+                where_clause += "AND ACTION_CODE = '1'"
+
+                # if modified and modified again
+                with arcpy.da.UpdateCursor(coding_table, coding_fields, where_clause) as ucursor:
+                    for row in ucursor:
+
+                        row[ndirs_pos] = "0" if row[ndirs_pos] == ndirs else row[ndirs_pos]
+                        row[ntype1_pos] = "0" if row[ntype1_pos] == ntype1 else row[ntype1_pos]
+                        row[ntype2_pos] = "0" if row[ntype2_pos] == ntype1 else row[ntype2_pos]
+                        row[nampm1_pos] = "0" if row[nampm1_pos] == nampm1 else row[nampm1_pos]
+                        row[nampm2_pos] = "0" if row[nampm2_pos] == nampm2 else row[nampm2_pos]
+                        row[nspeed1_pos] = 0 if row[nspeed1_pos] == nspeed1 else row[nspeed1_pos]
+                        row[nspeed2_pos] = 0 if row[nspeed2_pos] == nspeed2 else row[nspeed2_pos]
+                        row[nlanes1_pos] = 0 if row[nlanes1_pos] == nlanes1 else row[nlanes1_pos]
+                        row[nlanes2_pos] = 0 if row[nlanes2_pos] == nlanes2 else row[nlanes2_pos]
+                        row[nfeet1_pos] = 0 if row[nfeet1_pos] == nfeet1 else row[nfeet1_pos]
+                        row[nfeet2_pos] = 0 if row[nfeet2_pos] == nfeet1 else row[nfeet2_pos]
+                        row[aparklanes1_pos] = row[aparklanes1_pos] - aparklanes1 if row[aparklanes1_pos] != 0 else 0
+                        row[aparklanes2_pos] = row[aparklanes2_pos] - aparklanes1 if row[aparklanes2_pos] != 0 else 0
+                        row[cparkres1_pos] = "0" if row[cparkres1_pos] == cparkres1 else row[cparkres1_pos]
+                        row[cparkres2_pos] = "0" if row[cparkres2_pos] == cparkres2 else row[cparkres2_pos]
+                        row[abuslanes1_pos] = 0 if row[abuslanes1_pos] == abuslanes1 else row[abuslanes1_pos]
+                        row[abuslanes2_pos] = 0 if row[abuslanes2_pos] == abuslanes1 else row[abuslanes2_pos]
+                        row[asigic_pos] = 0 if row[asigic_pos] == asigic else row[asigic_pos]
+                        row[acltl_pos] = 0 if row[acltl_pos] == acltl else row[acltl_pos]
+                        row[arrgradex_pos] = 0 if row[arrgradex_pos] == arrgradex else row[arrgradex_pos]
+                        row[ntoll_pos] = "0" if row[ntoll_pos] == ntoll else row[ntoll_pos]
+                        row[nmodes_pos] = "0" if row[nmodes_pos] == nmodes else row[nmodes_pos]
+                        row[nvclearance_pos] = 0 if row[nvclearance_pos] == nvclearance else row[nvclearance_pos]
+
+                        row[notes_pos] = f"Modified in {current_year}"
+                        ucursor.updateRow(row)
+
+                # if modified and deleted- no impact
+                where_clause = "USE = 1 "
+                where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
+                where_clause += "AND ACTION_CODE = '3'"
+
+                spec_fields = ["PROCESS_NOTES"]
+                with arcpy.da.UpdateCursor(coding_table, spec_fields, where_clause) as ucursor:
+                    for row in ucursor:
+
+                        row[0] = f"Modified in {current_year}"
+                        ucursor.updateRow(row)
+
+        if len(action_3_dict) > 0:
+            
+            for action in action_3_dict:
+
+                project = action[0]
+                abb = action[1]
+
+                # set to skeleton link
+                where_clause = f"ABB = '{abb}'"
+                with arcpy.da.UpdateCursor(hwylink_fc, link_fields, where_clause) as ucursor:
+                    for row in ucursor:
+
+                        row[nbaselink_pos] = "0"
+                        row[proj_pos] = project
+                        row[desc_pos] = f"Deleted in {current_year}"
+                        ucursor.updateRow(row)
+
+                # if a link is deleted, it cannot be modified or deleted again
+                where_clause = "USE = 1 "
+                where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
+                where_clause += "AND ACTION_CODE in ('1', '3')"
+
+                spec_fields = ["USE", "PROCESS_NOTES"]
+
+                with arcpy.da.UpdateCursor(coding_table, spec_fields, where_clause) as ucursor:
+                    for row in ucursor:
+                        row[0] = 0 
+                        row[1] = f"Deleted in {current_year}"
+
+                        ucursor.updateRow(row)
+
+        if len(action_4_dict) > 0:
+
+            for action in action_4_dict:
+
+                project = action[0]
+                abb = action[1]
+
+                edits = action_4_dict[action]
+                ndirs = edits["NEW_DIRECTIONS"]
+                ntype1 = edits["NEW_TYPE1"]
+                ntype2 = edits["NEW_TYPE2"]
+                nampm1 = edits["NEW_AMPM1"]
+                nampm2 = edits["NEW_AMPM2"]
+                nspeed1 = edits["NEW_POSTEDSPEED1"]
+                nspeed2 = edits["NEW_POSTEDSPEED2"]
+                nlanes1 = edits["NEW_THRULANES1"]
+                nlanes2 = edits["NEW_THRULANES2"]
+                nfeet1 = edits["NEW_THRULANEWIDTH1"]
+                nfeet2 = edits["NEW_THRULANEWIDTH2"]
+                aparklanes1 = edits["ADD_PARKLANES1"]
+                aparklanes2 = edits["ADD_PARKLANES2"]
+                cparkres1 = edits["CHANGE_PARKRES1"]
+                cparkres2 = edits["CHANGE_PARKRES2"]
+                abuslanes1 = edits["ADD_BUSLANES1"]
+                abuslanes2 = edits["ADD_BUSLANES2"]
+                asigic = edits["ADD_SIGIC"]
+                acltl = edits["ADD_CLTL"]
+                arrgradex = edits["ADD_RRGRADECROSS"]
+                ntoll = edits["NEW_TOLLDOLLARS"]
+                nmodes = edits["NEW_MODES"]
+                nvclearance = edits["NEW_VCLEARANCE"]
+
+                where_clause = f"ABB = '{abb}'"
+                with arcpy.da.UpdateCursor(hwylink_fc, link_fields, where_clause) as ucursor:
+                    for row in ucursor:
+
+                        row[dirs_pos] = ndirs
+                        row[type1_pos] = ntype1
+                        row[type2_pos] = ntype2
+                        row[ampm1_pos] = nampm1
+                        row[ampm2_pos] = nampm2
+                        row[speed1_pos] = nspeed1
+                        row[speed2_pos] = nspeed2
+                        row[lanes1_pos] = nlanes1
+                        row[lanes2_pos] = nlanes2
+                        row[feet1_pos] = nfeet1
+                        row[feet2_pos] = nfeet2
+                        row[parklanes1_pos] = max((row[parklanes1_pos] + aparklanes1), 0)
+                        row[parklanes2_pos] = max((row[parklanes2_pos] + aparklanes2), 0)
+                        row[parkres1_pos] = cparkres1 if cparkres1 != "0" else row[parkres1_pos]
+                        row[parkres2_pos] = cparkres2 if cparkres2 != "0" else row[parkres2_pos]
+                        row[buslanes1_pos] = min(max((row[buslanes1_pos] + abuslanes1), 0), 1)
+                        row[buslanes2_pos] = min(max((row[buslanes2_pos] + abuslanes2), 0), 1)
+                        row[sigic_pos] = min(max((row[sigic_pos] + asigic), 0), 1)
+                        row[cltl_pos] = min(max((row[cltl_pos] + acltl), 0), 1)
+                        row[rrgradex_pos] = min(max((row[rrgradex_pos] + arrgradex), 0), 1)
+                        row[toll_pos] = ntoll if ntoll != "-1" else "0"
+                        row[modes_pos] = nmodes
+                        row[vclearance_pos] = nvclearance if nvclearance != -1 else 0
+
+                        row[nbaselink_pos] = "1"
+                        row[proj_pos] = project
+                        row[desc_pos] = f"Added in {current_year}"
+
+                        ucursor.updateRow(row)
+
+                # if added can't be added again 
+                where_clause = "USE = 1 "
+                where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
+                where_clause += "AND ACTION_CODE = '4'"
+                with arcpy.da.UpdateCursor(coding_table, coding_fields, where_clause) as ucursor:
+                    for row in ucursor:
+
+                        row[action_pos] = "1" # becomes modify
+
+                        row[ndirs_pos] = "0" if row[ndirs_pos] == ndirs else row[ndirs_pos]
+                        row[ntype1_pos] = "0" if row[ntype1_pos] == ntype1 else row[ntype1_pos]
+                        row[ntype2_pos] = "0" if row[ntype2_pos] == ntype1 else row[ntype2_pos]
+                        row[nampm1_pos] = "0" if row[nampm1_pos] == nampm1 else row[nampm1_pos]
+                        row[nampm2_pos] = "0" if row[nampm2_pos] == nampm2 else row[nampm2_pos]
+                        row[nspeed1_pos] = 0 if row[nspeed1_pos] == nspeed1 else row[nspeed1_pos]
+                        row[nspeed2_pos] = 0 if row[nspeed2_pos] == nspeed2 else row[nspeed2_pos]
+                        row[nlanes1_pos] = 0 if row[nlanes1_pos] == nlanes1 else row[nlanes1_pos]
+                        row[nlanes2_pos] = 0 if row[nlanes2_pos] == nlanes2 else row[nlanes2_pos]
+                        row[nfeet1_pos] = 0 if row[nfeet1_pos] == nfeet1 else row[nfeet1_pos]
+                        row[nfeet2_pos] = 0 if row[nfeet2_pos] == nfeet1 else row[nfeet2_pos]
+                        row[aparklanes1_pos] = row[aparklanes1_pos] - aparklanes1
+                        row[aparklanes2_pos] = row[aparklanes2_pos] - aparklanes2
+                        row[cparkres1_pos] = "0" if row[cparkres1_pos] == cparkres1 else row[cparkres1_pos]
+                        row[cparkres2_pos] = "0" if row[cparkres2_pos] == cparkres2 else row[cparkres2_pos]
+                        row[abuslanes1_pos] = 0 if row[abuslanes1_pos] == abuslanes1 else row[abuslanes1_pos]
+                        row[abuslanes2_pos] = 0 if row[abuslanes2_pos] == abuslanes1 else row[abuslanes2_pos]
+                        row[asigic_pos] = 0 if row[asigic_pos] == asigic else row[asigic_pos]
+                        row[acltl_pos] = 0 if row[acltl_pos] == acltl else row[acltl_pos]
+                        row[arrgradex_pos] = 0 if row[arrgradex_pos] == arrgradex else row[arrgradex_pos]
+                        row[ntoll_pos] = "0" if row[ntoll_pos] == ntoll else row[ntoll_pos]
+                        row[nmodes_pos] = "0" if row[nmodes_pos] == nmodes else row[nmodes_pos]
+                        row[nvclearance_pos] = 0 if row[nvclearance_pos] == nvclearance else row[nvclearance_pos]
+
+                        row[notes_pos] = f"Added in {current_year}"
+                        ucursor.updateRow(row)
+
+        # set use on all projects completed this year to 0 
+        where_clause = f"COMPLETION_YEAR = {current_year}"
+        with arcpy.da.UpdateCursor(coding_table, ["USE", "PROCESS_NOTES"], where_clause) as ucursor:
+            for row in ucursor:
+                row[0] = 0
+                row[1] = f"Completed in {current_year}"
+
+                ucursor.updateRow(row)
+
+        self.base_year = current_year
 
     # helper method to add relationship classes
     def add_rcs(self):
