@@ -1594,7 +1594,7 @@ class HighwayNetwork:
 
                         ucursor.updateRow(row)
 
-                where_clause = "USE = 1"
+                where_clause = "USE = 1 "
                 where_clause += f"AND ABB = '{abb}' AND COMPLETION_YEAR > {current_year} "
                 where_clause += "AND ACTION_CODE = '1'"
 
