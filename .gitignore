@@ -2,10 +2,10 @@ _misc/
 
 input/1_travel/MHN.gdb
 input/1_travel/MRN.gdb
+input/1_travel/override_meso
 input/1_travel/import_hwyproj_coding.xlsx
 input/1_travel/subset_hwy_projects.csv
 input/2_freight/MFN.gdb
-input/2_freight/override_meso
 
 output/
 *__pycache__*
