@@ -15,8 +15,8 @@ if __name__ == "__main__":
 
     XHN = ExtraHighwayNetwork()
     XHN.create_base_hwy()
-    XHN.check_hwy_fcs()
     XHN.edit_hwylink_meso()
+    XHN.check_hwy_fcs()
     XHN.finalize_hwy_data()
 
     end_time = time.time()
