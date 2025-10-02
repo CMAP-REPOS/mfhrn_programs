@@ -61,10 +61,15 @@ class EmmeTravelNetwork:
         arcpy.env.workspace = os.path.join(self.mhn_out_folder, "MHN_all.gdb")
 
         emme_hwy_folder = os.path.join(self.mhn_out_folder, "highway")
+        emme_ls_folder = os.path.join(self.mhn_out_folder, "linkshape")
 
         if os.path.isdir(emme_hwy_folder) == True:
             shutil.rmtree(emme_hwy_folder)
         os.mkdir(emme_hwy_folder)
+
+        if os.path.isdir(emme_ls_folder) == True:
+            shutil.rmtree(emme_ls_folder)
+        os.mkdir(emme_ls_folder)
 
         for year in years_list:
 
@@ -74,7 +79,7 @@ class EmmeTravelNetwork:
             os.mkdir(emme_scen_folder)
 
             self.write_ln_files(year, emme_scen_folder)
-            self.write_linkshape_file(year, emme_scen_folder)
+            self.write_linkshape_file(year, emme_ls_folder)
 
         print("Highway files generated.\n")
 
@@ -355,7 +360,7 @@ class EmmeTravelNetwork:
         print(f"Writing linkshape files for scenario {scenario}...\n")
         today = date.today().strftime("%d%b%y").upper()
 
-        linkshape_file_path = os.path.join(folder_path, "highway.linkshape")
+        linkshape_file_path = os.path.join(folder_path, f"linkshape_{scenario}.in")
         linkshape_file = open(linkshape_file_path, "a")
 
         linkshape_file.write(f"c HIGHWAY LINK SHAPE FILE FOR SCENARIO {scenario}\n")
