@@ -3,7 +3,7 @@
 ## Author: npeterson
 ## Translated + Updated by ccai (2025)
 
-from modules.ETN import EmmeTransitNetwork
+from modules.ETN import EmmeTravelNetwork
 
 import math
 import time
@@ -13,7 +13,7 @@ if __name__ == "__main__":
     start_time = time.time()
 
     # generate highway files
-    ETN = EmmeTransitNetwork()
+    ETN = EmmeTravelNetwork()
     ETN.generate_hwy_files()
 
     end_time = time.time()

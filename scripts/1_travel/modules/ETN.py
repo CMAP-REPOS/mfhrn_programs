@@ -13,7 +13,7 @@ import arcpy
 import pandas as pd
 from datetime import date
 
-class EmmeTransitNetwork:
+class EmmeTravelNetwork:
 
     # constructor
     def __init__(self):
