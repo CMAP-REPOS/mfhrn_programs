@@ -32,21 +32,21 @@ class EmmeTravelNetwork:
         self.years_dict = pd.read_csv(years_csv_path).set_index("year")["scenario"].to_dict()
 
         # 212 + 221 are not in here bc of TOD restrictions
-        self.mode_dict = {}
-        self.mode_dict["ASH"] = [
+        self.hwymode_dict = {}
+        self.hwymode_dict["ASH"] = [
             "201", "218"]
-        self.mode_dict["ASHTb"] = [
+        self.hwymode_dict["ASHTb"] = [
             "202", "203", "204", "209", "210", "211", 
             "213", "225", "235", "237"]
-        self.mode_dict["ASHTlb"] = [
+        self.hwymode_dict["ASHTlb"] = [
             "207", "208", "214", "216", "217", "219",
             "227", "229", "231", "234", "238", "239",
             "240", "241", "242", "243", "244", "246",
             "247", "249"]
-        self.mode_dict["ASHTmlb"] = [
+        self.hwymode_dict["ASHTmlb"] = [
             "205", "230", "245", "248"]
-        self.mode_dict["AThmlb"] = ["300"]
-        self.mode_dict["AH"] = ["500"]
+        self.hwymode_dict["AThmlb"] = ["300"]
+        self.hwymode_dict["AH"] = ["500"]
 
     # MAIN METHODS --------------------------------------------------------------------------------
 
@@ -235,8 +235,8 @@ class EmmeTravelNetwork:
                 emode = "ASHThmlb" # default
 
                 # if constant restriction
-                for res_type in self.mode_dict:
-                    if mode in self.mode_dict[res_type]:
+                for res_type in self.hwymode_dict:
+                    if mode in self.hwymode_dict[res_type]:
                         emode = res_type
 
                 # if overnight restriction
