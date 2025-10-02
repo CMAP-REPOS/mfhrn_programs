@@ -12,6 +12,7 @@ import os
 import shutil
 import sys
 import arcpy
+import math
 import pandas as pd
 
 class HighwayNetwork:
@@ -209,7 +210,10 @@ class HighwayNetwork:
         # check nodes
         node_fail = 0
         hwynode_fc = os.path.join(self.current_gdb, "hwynet/hwynet_node")
-        hwynode_fields = ["NODE", "subzone17", "zone17", "capzone17", "IMArea", "DESCRIPTION"]
+        hwynode_fields = ["NODE", "SHAPE@X", "SHAPE@Y", "subzone17", "zone17", 
+                          "capzone17", "IMArea", "DESCRIPTION"]
+        
+        node_coord_dict = {}
 
         # wipe description 
         arcpy.management.CalculateField(hwynode_fc, "DESCRIPTION", '" "', "PYTHON3")
@@ -217,9 +221,12 @@ class HighwayNetwork:
         with arcpy.da.UpdateCursor(hwynode_fc, hwynode_fields) as ucursor:
             for row in ucursor:
 
+                coords = arcpy.Point(row[1], row[2])
+                node_coord_dict[row[0]] = arcpy.PointGeometry(coords, arcpy.SpatialReference(26771))
+
                 if row[0] not in link_node_set: # check that nodes are not disconnected
                     node_fail +=1
-                    row[5] = "Error: node not connected to links"
+                    row[7] = "Error: node not connected to links"
                     ucursor.updateRow(row)
                     continue
 
@@ -242,8 +249,17 @@ class HighwayNetwork:
         # wipe description 
         arcpy.management.CalculateField(hwylink_fc, "DESCRIPTION", '" "', "PYTHON3")
 
-        with arcpy.da.UpdateCursor(hwylink_fc, link_fields) as ucursor:
+        # tack shape@ onto the end
+        with arcpy.da.UpdateCursor(hwylink_fc, link_fields + ["SHAPE@"]) as ucursor:
             for row in ucursor:
+
+                # check for multipart links
+                geom = row[len(link_fields)]
+                if geom.isMultipart:
+                    link_fail += 1
+                    row[desc_pos] = "Error: Link is multipart. Redraw"
+                    ucursor.updateRow(row)
+                    continue
 
                 # check that nodes are valid
                 anode = row[lf_dict["ANODE"]]
@@ -251,6 +267,18 @@ class HighwayNetwork:
                 if anode not in all_node_set or bnode not in all_node_set:
                     link_fail +=1
                     row[desc_pos] = "Error: ANODE or BNODE not in node fc"
+                    ucursor.updateRow(row)
+                    continue
+
+                # check that anode is valid
+                firstpoint = arcpy.PointGeometry(geom.firstPoint, arcpy.SpatialReference(26771))
+                anodepoint = node_coord_dict[anode]
+                lastpoint = arcpy.PointGeometry(geom.lastPoint, arcpy.SpatialReference(26771))
+                bnodepoint = node_coord_dict[bnode]
+
+                if firstpoint != anodepoint or lastpoint != bnodepoint:
+                    link_fail += 1
+                    row[desc_pos] = "Error: ANODE or BNODE incorrectly labeled. Redraw"
                     ucursor.updateRow(row)
                     continue
 
