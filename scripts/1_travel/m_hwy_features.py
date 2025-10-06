@@ -27,7 +27,6 @@ if __name__ == "__main__":
     if not args.final:
         BHN.resolve_hwy_geometry()
         BHN.check_hwy_fcs()
-        BHN.check_hwyproj_coding_table()
     else:
         BHN.finalize_hwy_data()
 

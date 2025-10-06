@@ -12,8 +12,6 @@ if __name__ == "__main__":
 
     HN = HighwayNetwork()
     HN.create_base_hwy()
-    HN.check_hwy_fcs()
-    HN.check_hwyproj_coding_table()
 
     end_time = time.time()
     total_time = round(end_time - start_time)

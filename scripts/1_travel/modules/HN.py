@@ -247,7 +247,7 @@ class HighwayNetwork:
         desc_pos = lf_dict["DESCRIPTION"]
 
         # wipe description 
-        arcpy.management.CalculateField(hwylink_fc, "DESCRIPTION", '" "', "PYTHON3")
+        arcpy.management.CalculateField(hwylink_fc, "DESCRIPTION", 'None', "PYTHON3")
 
         # tack shape@ onto the end
         with arcpy.da.UpdateCursor(hwylink_fc, link_fields + ["SHAPE@"]) as ucursor:
@@ -700,7 +700,7 @@ class HighwayNetwork:
         coded_dict, range_dict = self.get_domain_dicts()
 
         # wipe Process Notes field
-        arcpy.management.CalculateField(coding_table, "PROCESS_NOTES", '" "', "PYTHON3")
+        arcpy.management.CalculateField(coding_table, "PROCESS_NOTES", 'None', "PYTHON3")
 
         # primary key check
         # check that no TIPID + ABB is duplicated. 
