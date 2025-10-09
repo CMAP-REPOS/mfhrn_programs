@@ -255,12 +255,13 @@ class EmmeTravelNetwork:
                     emode = "ASH" # no trucks allowed
 
                 # if there is a vehicle clearance
-                if vclearance < 162:
-                    emode.replace("h", "") # minimum 13'6" clearance for heavy trucks
-                if vclearance < 150:
-                    emode.replace("m", "") # minimum 12'6" clearance for medium trucks
-                if vclearance < 138:
-                    emode.replace("l", "") # minimum 11'6" clearance for light trucks
+                if vclearance != 0:
+                    if vclearance < 162:
+                        emode = emode.replace("h", "") # minimum 13'6" clearance for heavy trucks
+                    if vclearance < 150:
+                        emode = emode.replace("m", "") # minimum 12'6" clearance for medium trucks
+                    if vclearance < 138:
+                        emode = emode.replace("l", "") # minimum 11'6" clearance for light trucks
 
                 space3 = " " * (8 - len(emode))
 
