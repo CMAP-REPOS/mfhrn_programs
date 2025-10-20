@@ -17,6 +17,26 @@ class BusHighwayNetwork(HighwayNetwork):
     def __init__(self):
         super().__init__()
 
+        self.bn_out_folder = os.path.join(self.mhn_out_folder, "bus_network")
+
+        # how similar bus runs have to be to be collapsed
+        self.threshold = 0.85
+
+        self.tod_dict = {
+            1: {"description": "6 PM - 6 AM",
+                "where_clause": "STARTHOUR >= 18 OR STARTHOUR < 6",
+                "maxtime": 720},
+            2: {"description": "6 AM - 9 AM",
+                "where_clause": "STARTHOUR >= 6 AND STARTHOUR < 9",
+                "maxtime": 180},
+            3: {"description": "9 AM - 4 PM",
+                "where_clause": "STARTHOUR >= 9 AND STARTHOUR < 16", 
+                "maxtime": 420},
+            4: {"description": "4 PM - 6 PM",
+                "where_clause": "STARTHOUR >= 16 AND STARTHOUR < 18",
+                "maxtime": 120}
+        }
+
         self.headway_dict = {
             20: 600, 21: 600, 22: 600, 23: 600, 0: 600, 1: 600, 2: 600, 3: 600, 4: 600, 5: 600, 
             6: 60, 
@@ -29,7 +49,87 @@ class BusHighwayNetwork(HighwayNetwork):
 
     # MAIN METHODS --------------------------------------------------------------------------------
 
-    
+    # method that creates the transit network folder
+    def create_bn_folder(self):
+        
+        bn_out_folder = self.bn_out_folder
+
+        if os.path.isdir(bn_out_folder) == True:
+            shutil.rmtree(bn_out_folder)
+
+        os.mkdir(bn_out_folder)
+
+        print("Transit network output folder created.\n")
+
+    # method that collapses routes
+    def collapse_bus_routes(self):
+
+        print("Collapsing routes by TOD...")
+
+        mhn_in_gdb = self.mhn_in_gdb
+        bn_out_folder = self.bn_out_folder
+
+        cr_gdb_name = "collapsed_routes.gdb"
+        arcpy.management.CreateFileGDB(bn_out_folder, cr_gdb_name)
+        cr_gdb = os.path.join(bn_out_folder, cr_gdb_name)
+
+        # copy fcs
+        self.current_gdb = cr_gdb
+
+        self.copy_bus_fcs("bus_base")
+        self.copy_bus_fcs("bus_current")
+        self.copy_bus_fcs("bus_future")
+
+        # get dfs + dict for bus base itin
+        base_itin = os.path.join(mhn_in_gdb, "bus_base_itin")
+        base_itin_fields = [f.name for f in arcpy.ListFields(base_itin) if (f.name != "OBJECTID")]
+        base_itin_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(base_itin, base_itin_fields)],
+            columns = base_itin_fields
+        ).sort_values(["TRANSIT_LINE", "ITIN_ORDER"])
+
+        base_itin_dict = {k: v.to_dict(orient='records') for k, v in base_itin_df.groupby("TRANSIT_LINE")}
+        base_rf_dict = self.reformat_gtfs_feed(base_itin_dict)
+
+        # get dfs + dicts for bus current itin
+        current_itin = os.path.join(mhn_in_gdb, "bus_current_itin")
+        current_itin_fields = [f.name for f in arcpy.ListFields(current_itin) if (f.name != "OBJECTID")]
+        current_itin_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(current_itin, current_itin_fields)],
+            columns = current_itin_fields
+        ).sort_values(["TRANSIT_LINE", "ITIN_ORDER"])
+
+        current_itin_dict = {k: v.to_dict(orient='records') for k, v in current_itin_df.groupby("TRANSIT_LINE")}
+        current_rf_dict = self.reformat_gtfs_feed(current_itin_dict)
+
+        # create TOD feature datasets
+        arcpy.management.CreateFeatureDataset(cr_gdb, "TOD_1", spatial_reference = 26771)
+        arcpy.management.CreateFeatureDataset(cr_gdb, "TOD_2", spatial_reference = 26771)
+        arcpy.management.CreateFeatureDataset(cr_gdb, "TOD_3", spatial_reference = 26771)
+        arcpy.management.CreateFeatureDataset(cr_gdb, "TOD_4", spatial_reference = 26771)
+
+        # make feature layers
+        base_fc = os.path.join(cr_gdb, "bus_base")
+        arcpy.management.MakeFeatureLayer(base_fc, "base_layer")
+        current_fc = os.path.join(cr_gdb, "bus_current")
+        arcpy.management.MakeFeatureLayer(current_fc, "current_layer")
+        future_fc = os.path.join(cr_gdb, "bus_future")
+        arcpy.management.MakeFeatureLayer(future_fc, "future_layer")
+
+        # TOD 1
+
+        # collapse gtfs routes
+        self.find_rep_runs(tod= 1, which_gtfs="base", rf_dict = base_rf_dict)
+        self.find_rep_runs(tod= 1, which_gtfs="current", rf_dict = current_rf_dict)
+
+        # arcpy.management.SelectLayerByAttribute(
+        #     "future_layer", "NEW_SELECTION", "TOD = '0' Or TOD LIKE '%1%'"
+        # )
+
+        # future_fc_1 = os.path.join(tod_1_fd, "bus_future_1")
+        # arcpy.management.CopyFeatures("future_layer", future_fc_1)
+
+        print("TOD routes collapsed.\n")
 
     # method that imports gtfs lines and segments
     # NOTE - NOT COMPLETE!!
@@ -210,3 +310,157 @@ class BusHighwayNetwork(HighwayNetwork):
         table = pd.DataFrame(prepped_line_info, columns=header)
 
         return table
+    
+    # helper method to copy fcs to collapse routes
+    def copy_bus_fcs(self, fc_name):
+
+        # copy current fc over
+        input_fc = os.path.join(self.mhn_in_gdb, "hwynet", fc_name) 
+        arcpy.management.CreateFeatureclass(self.current_gdb, fc_name, template = input_fc, spatial_reference = 26771)
+        output_fc = os.path.join(self.current_gdb, fc_name)
+
+        exclude_fields = ["OBJECTID", "Shape", "Shape_Length"]
+        fields = [f.name for f in arcpy.ListFields(input_fc) if (f.name not in exclude_fields)]
+        fields += ["SHAPE@"]
+
+        with arcpy.da.SearchCursor(input_fc, fields) as scursor:
+            with arcpy.da.InsertCursor(output_fc, fields) as icursor:
+
+                for row in scursor:
+                    icursor.insertRow(row)
+
+        if fc_name == "bus_future":
+            return
+
+        arcpy.management.CalculateField(
+            in_table = output_fc,
+            field = "MR_ID",
+            expression='!MODE! + "-" + !ROUTE_ID!', 
+            expression_type="PYTHON3", 
+            code_block="", 
+            field_type="TEXT", 
+            enforce_domains="NO_ENFORCE_DOMAINS"
+        )
+
+        arcpy.management.AddField(output_fc, "BUS_GROUP", "SHORT")
+
+    # helper method to reformat feed
+    def reformat_gtfs_feed(self, itin_dict):
+
+        reformat_dict = {}
+
+        for tr_line in itin_dict:
+            tr_itin = itin_dict[tr_line]
+            tr_path = []
+
+            for record in tr_itin:
+                
+                itin_a = record["ITIN_A"]
+                itin_b = record["ITIN_B"]
+                dw_code = record["DWELL_CODE"]
+
+                record_string = f"{itin_a}-{itin_b}-{dw_code}"
+                tr_path.append(record_string)
+
+            reformat_dict[tr_line] = tr_path
+
+        return reformat_dict
+    
+    # helper method that finds representative runs
+    def find_rep_runs(self, tod, which_gtfs, rf_dict):
+
+        where_clause = self.tod_dict[tod]["where_clause"]
+        maxtime = self.tod_dict[tod]["maxtime"]
+
+        bus_layer = f"{which_gtfs}_layer"
+
+        arcpy.management.SelectLayerByAttribute(
+            bus_layer, "NEW_SELECTION", where_clause)
+        
+        tod_fd = os.path.join(self.current_gdb, f"TOD_{tod}")
+        all_tod_fc = os.path.join(tod_fd, f"all_{which_gtfs}_{tod}")
+
+        arcpy.management.CopyFeatures(bus_layer, all_tod_fc)
+
+        # get lines and group by MODE- ROUTE_ID (MR_ID)
+        lines_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(all_tod_fc, ["MR_ID", "TRANSIT_LINE"])], 
+            columns = ["MR_ID", "TRANSIT_LINE"])
+        
+        lines_dict = lines_df.groupby('MR_ID')['TRANSIT_LINE'].apply(list).to_dict()
+
+        group = 0
+        groups = {}
+
+        # find routes similar enough to be collapsed
+        for mr_id in lines_dict:
+
+            mr_lines = lines_dict[mr_id]
+
+            while True:
+
+                group += 1
+                base_run = mr_lines.pop(0)
+                groups[base_run] = group
+
+                # compare all other runs against base run
+                for comp_run in mr_lines[:]: # make a copy to iterate safely
+
+                    base_run_path = rf_dict[base_run]
+                    comp_run_path = rf_dict[comp_run]
+
+                    base_run_set = set(base_run_path)
+                    comp_run_set = set(comp_run_path)
+                    common_set = base_run_set & comp_run_set
+
+                    base_run_num = len(base_run_set)
+                    common_num = len(common_set)
+
+                    if common_num/ base_run_num >= self.threshold:
+                        groups[comp_run] = group
+                        mr_lines.remove(comp_run)
+                
+                if len(mr_lines) == 0:
+                    break
+
+        with arcpy.da.UpdateCursor(all_tod_fc, ["TRANSIT_LINE", "BUS_GROUP"]) as ucursor:
+            for row in ucursor:
+
+                tr_line = row[0]
+                row[1] = groups[tr_line]
+
+                ucursor.updateRow(row)
+
+        # find representative routes
+        # get number of segments 
+        num_seg_dict = {k: len(v) for k, v in rf_dict.items()}
+
+        # get line df 
+        lines_fields = ["BUS_GROUP", "TRANSIT_LINE", "START"]
+        
+        lines_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(all_tod_fc, lines_fields)], 
+            columns = lines_fields)
+        
+        lines_df["NUM_SEGS"] = lines_df["TRANSIT_LINE"].apply(lambda x: num_seg_dict[x])
+        
+        # comes earliest in that time period (adjusts for TOD 1)
+        lines_df["START"] = lines_df["START"].apply(lambda x: x + 86400 if x < 21600 else x)
+
+        # longest, then starts earliest
+        lines_df = lines_df.sort_values(["BUS_GROUP", "NUM_SEGS", "START"], 
+                                        ascending = [True, False, True])
+        rep_routes = lines_df.groupby("BUS_GROUP").first()["TRANSIT_LINE"].to_list()
+
+        rep_tod_fc = os.path.join(tod_fd, f"rep_{which_gtfs}_{tod}")
+        arcpy.management.CopyFeatures(all_tod_fc, rep_tod_fc)
+
+        with arcpy.da.UpdateCursor(rep_tod_fc, ["TRANSIT_LINE"]) as ucursor:
+            for row in ucursor:
+
+                if row[0] not in rep_routes:
+                    ucursor.deleteRow()
+
+        # calculate headway
+
+        

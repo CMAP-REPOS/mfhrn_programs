@@ -160,7 +160,7 @@ class EmmeTravelNetwork:
 
         return hwylink_records
 
-    # helper method that writes link and node files
+    # helper method that writes highway link and node files
     def write_ln_files(self, year, folder_path):
         
         scenario = self.years_dict[year]
