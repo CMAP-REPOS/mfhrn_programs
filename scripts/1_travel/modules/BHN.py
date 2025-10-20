@@ -10,6 +10,8 @@ import csv
 import arcpy
 import pandas as pd
 
+pd.options.mode.chained_assignment = None
+
 from .HN import HighwayNetwork
 
 class BusHighwayNetwork(HighwayNetwork):
@@ -49,7 +51,7 @@ class BusHighwayNetwork(HighwayNetwork):
 
     # MAIN METHODS --------------------------------------------------------------------------------
 
-    # method that creates the transit network folder
+    # method that creates the bus network folder
     def create_bn_folder(self):
         
         bn_out_folder = self.bn_out_folder
@@ -59,7 +61,7 @@ class BusHighwayNetwork(HighwayNetwork):
 
         os.mkdir(bn_out_folder)
 
-        print("Transit network output folder created.\n")
+        print("Bus network output folder created.\n")
 
     # method that collapses routes
     def collapse_bus_routes(self):
@@ -102,6 +104,16 @@ class BusHighwayNetwork(HighwayNetwork):
         current_itin_dict = {k: v.to_dict(orient='records') for k, v in current_itin_df.groupby("TRANSIT_LINE")}
         current_rf_dict = self.reformat_gtfs_feed(current_itin_dict)
 
+        # get dfs + dicts for bus future itin
+        future_itin = os.path.join(mhn_in_gdb, "bus_future_itin")
+        future_itin_fields = [f.name for f in arcpy.ListFields(future_itin) if (f.name != "OBJECTID")]
+        future_itin_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(future_itin, future_itin_fields)],
+            columns = future_itin_fields
+        ).sort_values(["TRANSIT_LINE", "ITIN_ORDER"])
+
+        future_itin_dict = {k: v.to_dict(orient='records') for k, v in future_itin_df.groupby("TRANSIT_LINE")}
+
         # create TOD feature datasets
         arcpy.management.CreateFeatureDataset(cr_gdb, "TOD_1", spatial_reference = 26771)
         arcpy.management.CreateFeatureDataset(cr_gdb, "TOD_2", spatial_reference = 26771)
@@ -116,11 +128,19 @@ class BusHighwayNetwork(HighwayNetwork):
         future_fc = os.path.join(cr_gdb, "bus_future")
         arcpy.management.MakeFeatureLayer(future_fc, "future_layer")
 
+        # make geom dict
+        geom_dict = self.build_geom_dict()
+
         # TOD 1
 
         # collapse gtfs routes
         self.find_rep_runs(tod= 1, which_gtfs="base", rf_dict = base_rf_dict)
         self.find_rep_runs(tod= 1, which_gtfs="current", rf_dict = current_rf_dict)
+
+        self.find_rep_itins(tod= 1, which_bus = "base", 
+                            itin_dict = base_itin_dict, geom_dict = geom_dict)
+        self.find_rep_itins(tod= 1, which_bus = "current", 
+                            itin_dict = current_itin_dict, geom_dict = geom_dict)
 
         # arcpy.management.SelectLayerByAttribute(
         #     "future_layer", "NEW_SELECTION", "TOD = '0' Or TOD LIKE '%1%'"
@@ -343,6 +363,7 @@ class BusHighwayNetwork(HighwayNetwork):
         )
 
         arcpy.management.AddField(output_fc, "BUS_GROUP", "SHORT")
+        arcpy.management.AddField(output_fc, "AVG_HEADWAY", "FLOAT")
 
     # helper method to reformat feed
     def reformat_gtfs_feed(self, itin_dict):
@@ -447,6 +468,14 @@ class BusHighwayNetwork(HighwayNetwork):
         # comes earliest in that time period (adjusts for TOD 1)
         lines_df["START"] = lines_df["START"].apply(lambda x: x + 86400 if x < 21600 else x)
 
+        # calculate headway
+        lines_df = lines_df.sort_values(["BUS_GROUP", "START"])
+        lines_df["PREV_START"] = lines_df.groupby("BUS_GROUP")["START"].shift()
+        subtract_df = lines_df[lines_df.PREV_START.notnull()]
+        subtract_df["HEADWAY"] = (subtract_df["START"] - subtract_df["PREV_START"]) /60
+
+        headway_dict = subtract_df.groupby("BUS_GROUP")["HEADWAY"].mean().to_dict()
+
         # longest, then starts earliest
         lines_df = lines_df.sort_values(["BUS_GROUP", "NUM_SEGS", "START"], 
                                         ascending = [True, False, True])
@@ -455,12 +484,139 @@ class BusHighwayNetwork(HighwayNetwork):
         rep_tod_fc = os.path.join(tod_fd, f"rep_{which_gtfs}_{tod}")
         arcpy.management.CopyFeatures(all_tod_fc, rep_tod_fc)
 
-        with arcpy.da.UpdateCursor(rep_tod_fc, ["TRANSIT_LINE"]) as ucursor:
+        fields = ["TRANSIT_LINE", "BUS_GROUP", "AVG_HEADWAY"]
+
+        with arcpy.da.UpdateCursor(rep_tod_fc, fields) as ucursor:
             for row in ucursor:
 
                 if row[0] not in rep_routes:
                     ucursor.deleteRow()
 
-        # calculate headway
+                else:
+                    bus_group = row[1]
+                    
+                    if bus_group in headway_dict:
+                        row[2] = round(headway_dict[bus_group], 1)
+                    else:
+                        row[2] = maxtime
 
+                    ucursor.updateRow(row)
+
+    # helper method that builds geometry dict
+    def build_geom_dict(self):
+
+        mhn_in_gdb = self.mhn_in_gdb
+
+        link_fields = ["ANODE", "BNODE", "ABB", "DIRECTIONS"]
+
+        hwylink_fc = os.path.join(mhn_in_gdb, "hwynet", "hwynet_arc")
+        hwylink_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(hwylink_fc, link_fields)], 
+            columns = link_fields)
+
+        hwylink_rev_df = pd.merge(hwylink_df, hwylink_df.copy(), 
+                                  left_on = ["ANODE", "BNODE"], right_on = ["BNODE", "ANODE"])
+        hwylink_rev_set = set(hwylink_rev_df.ABB_x.to_list())
+
+        fields = ["SHAPE@", "ANODE", "BNODE", "ABB"]
+
+        geom_dict = {}
+
+        with arcpy.da.SearchCursor(hwylink_fc, fields) as scursor:
+            for row in scursor:
+
+                geom = row[0]
+                anode = row[1]
+                bnode = row[2]
+                abb = row[3]
+
+                multi_array = arcpy.Array()
+                for part in geom:
+                    part_array = arcpy.Array([point for point in part])
+                    multi_array.append(part_array)
+                    
+                polyline = arcpy.Polyline(multi_array, spatial_reference = 26771)
+
+                geom_dict[(anode, bnode)] = polyline
+                if abb not in hwylink_rev_set:
+                    geom_dict[(bnode, anode)] = polyline
+
+        return geom_dict
+    
+    # helper method that finds representative itineraries
+    def find_rep_itins(self, tod, which_bus, itin_dict, geom_dict):
+
+        tod_fd = os.path.join(self.current_gdb, f"TOD_{tod}")
+        itin_tod_fc = os.path.join(tod_fd, f"itin_{which_bus}_{tod}")
         
+        # prepare feature class
+        arcpy.management.CreateFeatureclass(
+            tod_fd, f"itin_{which_bus}_{tod}", "POLYLINE")
+        
+        add_fields = [
+            ["TRANSIT_LINE", "TEXT"], ["ITIN_ORDER", "SHORT"],
+            ["ITIN_A", "LONG"], ["ITIN_B", "LONG"],
+            ["ABB", "TEXT"], ["LAYOVER", "SHORT"],
+            ["DWELL_CODE", "TEXT"], ["ZONE_FARE", "SHORT"],
+            ["LINE_SERV_TIME", "FLOAT"], ["TTF", "FLOAT"],
+            ["NOTES", "TEXT"]
+        ]
+
+        arcpy.management.AddFields(itin_tod_fc, add_fields)
+
+        # get rep routes 
+        rep_tod_fc = os.path.join(tod_fd, f"rep_{which_bus}_{tod}")
+        rep_routes = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(rep_tod_fc, ["TRANSIT_LINE"])], 
+            columns = ["TRANSIT_LINE"]).TRANSIT_LINE.to_list()
+        
+        # get rep itins
+        fields = ["SHAPE@", "TRANSIT_LINE", "ITIN_ORDER", 
+                  "ITIN_A", "ITIN_B", "ABB", "LAYOVER", "DWELL_CODE",
+                  "ZONE_FARE", "LINE_SERV_TIME", "TTF", "NOTES"]
+        with arcpy.da.InsertCursor(itin_tod_fc, fields) as icursor:
+            for tr_line in itin_dict:
+
+                if tr_line not in rep_routes:
+                    continue
+
+                itin = itin_dict[tr_line]
+
+                itin_order = 0
+                for i in range(0, len(itin)):
+
+                    record = itin[i]
+                    itin_order += 1
+
+                    itin_a = record["ITIN_A"]
+                    itin_b = record["ITIN_B"]
+                    abb = record["ABB"]
+                    layover = record["LAYOVER"]
+                    dwc = record["DWELL_CODE"]
+                    zfare = record["ZONE_FARE"]
+                    lst = record["LINE_SERV_TIME"]
+                    ttf = record["TTF"]
+
+                    if (itin_a, itin_b) in geom_dict:
+                        geom = geom_dict[(itin_a, itin_b)]
+                        notes = None
+                    else:
+                        geom = None
+                        notes = "Itin Gap"
+                    
+                    row = [geom, tr_line, itin_order, itin_a, itin_b,
+                           abb, layover, dwc, zfare, lst, ttf, notes]
+                    icursor.insertRow(row)
+
+                    if i == len(itin) - 1:
+                        continue
+
+                    next_record = itin[i+1]
+                    next_a = next_record["ITIN_A"]
+
+                    if itin_b != next_a:
+
+                        itin_order+= 1
+                        row = [None, tr_line, itin_order, itin_b, next_a,
+                               None, None, None, None, None, None, "Itin Gap"]
+                        icursor.insertRow(row)
