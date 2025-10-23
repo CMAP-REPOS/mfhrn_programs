@@ -204,9 +204,9 @@ class EmmeTravelNetwork:
             elif tod in [6, 7, 8]:
                 ampm_links += ["1", "3", "5"]
             
-            hwylink_df = hwylink_df[hwylink_df.ampm.isin(ampm_links)]
-            hwylink_dict = hwylink_df.set_index(["inode", "jnode"]).to_dict("index")
-            node_set = set(hwylink_df.inode.to_list()) | set(hwylink_df.jnode.to_list())
+            hwylink_tod = hwylink_df[hwylink_df.ampm.isin(ampm_links)]
+            hwylink_dict = hwylink_tod.set_index(["inode", "jnode"]).to_dict("index")
+            node_set = set(hwylink_tod.inode.to_list()) | set(hwylink_tod.jnode.to_list())
 
             # LINKS
             l1_file_path = os.path.join(folder_path, f"{scenario}0{tod}.l1")
