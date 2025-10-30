@@ -13,8 +13,10 @@ if __name__ == "__main__":
     start_time = time.time()
 
     BHN = BusHighwayNetwork()
-    BHN.create_bn_folder()
-    BHN.collapse_bus_routes()
+    # BHN.create_bn_folder()
+    geom_dict = BHN.build_geom_dict()
+    # BHN.collapse_bus_routes(geom_dict)
+    BHN.create_bus_layers(geom_dict)
 
     end_time = time.time()
     total_time = round(end_time - start_time)
