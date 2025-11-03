@@ -27,7 +27,7 @@ class BusHighwayNetwork(HighwayNetwork):
 
         # scenario dict
         self.scenario_dict = {
-            1: 2019,
+            # 1: 2019,
             3: 2030
         }
 
@@ -70,6 +70,8 @@ class BusHighwayNetwork(HighwayNetwork):
             18: 120, 19: 120}
         
         self.ETN = EmmeTravelNetwork()
+
+        self.geom_dict = self.build_geom_dict()
 
     # MAIN METHODS --------------------------------------------------------------------------------
 
@@ -131,12 +133,14 @@ class BusHighwayNetwork(HighwayNetwork):
         return geom_dict
 
     # method that collapses routes
-    def collapse_bus_routes(self, geom_dict):
+    def collapse_bus_routes(self):
 
         print("Collapsing routes by TOD...")
 
         mhn_in_gdb = self.mhn_in_gdb
         bn_out_folder = self.bn_out_folder
+
+        geom_dict = self.geom_dict
 
         cr_gdb_name = "collapsed_routes.gdb"
         arcpy.management.CreateFileGDB(bn_out_folder, cr_gdb_name)
@@ -212,10 +216,8 @@ class BusHighwayNetwork(HighwayNetwork):
             self.find_rep_runs(tod= tod, which_gtfs="base", rf_dict = base_rf_dict)
             self.find_rep_runs(tod= tod, which_gtfs="current", rf_dict = current_rf_dict)
 
-            self.find_rep_itins(tod= tod, which_bus = "base", 
-                                itin_dict = base_itin_dict, geom_dict = geom_dict)
-            self.find_rep_itins(tod= tod, which_bus = "current", 
-                                itin_dict = current_itin_dict, geom_dict = geom_dict)
+            self.find_rep_itins(tod= tod, which_bus = "base", itin_dict = base_itin_dict)
+            self.find_rep_itins(tod= tod, which_bus = "current", itin_dict = current_itin_dict)
 
             arcpy.management.SelectLayerByAttribute(
                 "future_layer", "NEW_SELECTION", f"TOD = '0' Or TOD LIKE '%{tod}%'"
@@ -223,25 +225,24 @@ class BusHighwayNetwork(HighwayNetwork):
             rep_future_fc = os.path.join(cr_gdb, f"TOD_{tod}", f"rep_future_{tod}")
             arcpy.management.CopyFeatures("future_layer", rep_future_fc)
 
-            self.find_rep_itins(tod= tod, which_bus = "future",
-                                itin_dict = future_itin_dict, geom_dict = geom_dict)
+            self.find_rep_itins(tod= tod, which_bus = "future", itin_dict = future_itin_dict)
 
         print("TOD routes collapsed.\n")
 
     # method that creates bus layers for each scenario
-    def create_bus_layers(self, geom_dict):
+    def create_bus_layers(self):
 
         print("Creating bus layers...")
 
         scenario_dict = self.scenario_dict
         bn_out_folder = self.bn_out_folder
 
+        geom_dict = self.geom_dict
+
         mhn_all_gdb = os.path.join(self.mhn_out_folder, "MHN_all.gdb")
 
         # first, make bus gdbs
         for scen in scenario_dict:
-
-            print(f"Creating bus layers for scenario {scen}...")
 
             year = scenario_dict[scen]
 
@@ -264,13 +265,16 @@ class BusHighwayNetwork(HighwayNetwork):
             # for each tod
             for tod in [1, 2, 3, 4]:
 
+                print(f"Creating bus layers for scenario {scen} TOD {tod}...")
+
                 arcpy.management.CreateFeatureDataset(scen_gdb, f"TOD_{tod}", spatial_reference = 26771)
 
                 # find highway links
-                G = self.create_tod_hwy_networks(scen, tod, geom_dict)
+                G = self.create_tod_hwy_networks(scen, tod)
 
                 # find bus networks
                 reroute_dict = self.create_tod_bus_runs(scen, tod)
+                self.create_tod_bus_itins(scen, tod, reroute_dict)
 
         # Use TOD 3 highways for AM transit
 
@@ -626,7 +630,9 @@ class BusHighwayNetwork(HighwayNetwork):
                     ucursor.updateRow(row)
 
     # helper method that finds representative itineraries
-    def find_rep_itins(self, tod, which_bus, itin_dict, geom_dict):
+    def find_rep_itins(self, tod, which_bus, itin_dict):
+
+        geom_dict = self.geom_dict
 
         tod_fd = os.path.join(self.current_gdb, f"TOD_{tod}")
         itin_tod_fc = os.path.join(tod_fd, f"itin_{which_bus}_{tod}")
@@ -705,9 +711,10 @@ class BusHighwayNetwork(HighwayNetwork):
                         icursor.insertRow(row)
 
     # helper method which makes tod highway networks 
-    def create_tod_hwy_networks(self, scen, tod, geom_dict):
+    def create_tod_hwy_networks(self, scen, tod):
 
         bn_out_folder = self.bn_out_folder
+        geom_dict = self.geom_dict
 
         scen_gdb = os.path.join(bn_out_folder, f"SCENARIO_{scen}.gdb")
 
@@ -821,7 +828,7 @@ class BusHighwayNetwork(HighwayNetwork):
         add_fields = [
             ["TRANSIT_LINE", "TEXT"], ["DESCRIPTION", "TEXT"],
             ["MODE", "TEXT"], ["VEHICLE_TYPE", "TEXT"], ["HEADWAY", "FLOAT"], 
-            ["SPEED", "SHORT"], ["NOTES", "TEXT"]
+            ["SPEED", "SHORT"], ["MR_ID", "TEXT"], ["NOTES", "TEXT"]
         ]
 
         arcpy.management.AddFields(rep_scen_fc, add_fields)
@@ -868,7 +875,7 @@ class BusHighwayNetwork(HighwayNetwork):
         sfields = ["SHAPE@", "TRANSIT_LINE", "DESCRIPTION", "MODE",
                    "VEHICLE_TYPE", "AVG_HEADWAY", "SPEED", "MR_ID"]
         ifields = ["SHAPE@", "TRANSIT_LINE", "DESCRIPTION", "MODE",
-                   "VEHICLE_TYPE", "HEADWAY", "SPEED"]
+                   "VEHICLE_TYPE", "HEADWAY", "SPEED", "MR_ID"]
         
         mode_hdwys = {}
         replace_hdwys = []
@@ -897,7 +904,7 @@ class BusHighwayNetwork(HighwayNetwork):
                     mode_hdwys[mode].append(hdwy)
 
                     icursor.insertRow(
-                        [row[0], tr_line, desc, mode, veh_type, hdwy, speed]
+                        [row[0], tr_line, desc, mode, veh_type, hdwy, speed, mr_id]
                     )
 
         mode_hdwys = {k: sum(v)/len(v) for k, v in mode_hdwys.items()}
@@ -950,11 +957,80 @@ class BusHighwayNetwork(HighwayNetwork):
                     final_hdwy = min(final_hdwy, maxtime)
 
                     icursor.insertRow(
-                        [row[0], tr_line, desc, mode, veh_type, final_hdwy, speed]
+                        [row[0], tr_line, desc, mode, veh_type, final_hdwy, speed, None]
                     )
 
         return reroute_dict
 
+    # helper method which makes tod bus itineraries
+    def create_tod_bus_itins(self, scen, tod, reroute_dict):
+
+        bn_out_folder = self.bn_out_folder
+
+        cr_gdb = os.path.join(bn_out_folder, f"collapsed_routes.gdb")
+        scen_gdb = os.path.join(bn_out_folder, f"SCENARIO_{scen}.gdb")
+
+        which_gtfs = "base"
+        if scen > 1:
+            which_gtfs = "current"
+
+        # get itins as dicts
+        tod_fd = os.path.join(cr_gdb, f"TOD_{tod}")
+        itin_gtfs_fc = os.path.join(tod_fd, f"itin_{which_gtfs}_{tod}")
+        itin_future_fc = os.path.join(tod_fd, f"itin_future_{tod}")
+
+        exclude_fields = ["OBJECTID", "Shape", "Shape_Length"]
+        fields = [f.name for f in arcpy.ListFields(itin_gtfs_fc) if (f.name not in exclude_fields)]
+
+        itin_gtfs_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(itin_gtfs_fc, fields)],
+            columns = fields
+        ).sort_values(["TRANSIT_LINE", "ITIN_ORDER"])
+
+        itin_gtfs_dict = {k: v.to_dict(orient='records') for k, v in itin_gtfs_df.groupby("TRANSIT_LINE")}
+
+        itin_future_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(itin_future_fc, fields)],
+            columns = fields
+        ).sort_values(["TRANSIT_LINE", "ITIN_ORDER"])
+
+        itin_future_dict = {k: v.to_dict(orient='records') for k, v in itin_future_df.groupby("TRANSIT_LINE")}
+
+        # all the lines for the scenario
+        tod_fd = os.path.join(scen_gdb, f"TOD_{tod}")
+        rep_scen_fc = os.path.join(tod_fd, f"rep_scen_{tod}")
+
+        transit_lines = {row[0]: row[1] for row in arcpy.da.SearchCursor(rep_scen_fc, ["TRANSIT_LINE", "MR_ID"])}
+
+        # create itin 
+        arcpy.management.CreateFeatureclass(tod_fd, f"rep_itin_{tod}", "POLYLINE", itin_gtfs_fc)
+        rep_itin_fc = os.path.join(tod_fd, f"rep_itin_{tod}")
+
+        fields = ["TRANSIT_LINE", "ITIN_ORDER", 
+                  "ITIN_A", "ITIN_B"]
+        
+        with arcpy.da.InsertCursor(rep_itin_fc, fields) as icursor:
+
+            for transit_line in transit_lines:
+
+                mr_id = transit_lines[transit_line]
+                line_itin = None
+
+                if transit_line in itin_gtfs_dict:
+                    line_itin = itin_gtfs_dict[transit_line]
+
+                elif transit_line in itin_future_dict:
+                    line_itin = itin_future_dict[transit_line]
+
+                for record in line_itin:
+
+                    itin_order = record["ITIN_ORDER"]
+                    itin_a = record["ITIN_A"]
+                    itin_b = record["ITIN_B"]
+
+                    icursor.insertRow(
+                        [transit_line, itin_order, itin_a, itin_b]
+                    )
 
     # helper method that finds the replaced headway
     def find_replaced_headway(self, replace_mrids, replace_hdwys):
@@ -970,3 +1046,5 @@ class BusHighwayNetwork(HighwayNetwork):
             return min(headways)
         else:
             return 0
+        
+    # helper method that makes usable line itin
