@@ -71,6 +71,7 @@ class BusHighwayNetwork(HighwayNetwork):
         
         self.ETN = EmmeTravelNetwork()
 
+
         self.geom_dict = self.build_geom_dict()
 
     # MAIN METHODS --------------------------------------------------------------------------------
@@ -87,51 +88,6 @@ class BusHighwayNetwork(HighwayNetwork):
 
         print("Bus network output folder created.\n")
 
-    # method that builds geometry dict
-    def build_geom_dict(self):
-
-        print("Building geometry dictionary of all highway links...")
-
-        mhn_in_gdb = self.mhn_in_gdb
-
-        link_fields = ["ANODE", "BNODE", "ABB", "DIRECTIONS"]
-
-        hwylink_fc = os.path.join(mhn_in_gdb, "hwynet", "hwynet_arc")
-        hwylink_df = pd.DataFrame(
-            data = [row for row in arcpy.da.SearchCursor(hwylink_fc, link_fields)], 
-            columns = link_fields)
-
-        hwylink_rev_df = pd.merge(hwylink_df, hwylink_df.copy(), 
-                                  left_on = ["ANODE", "BNODE"], right_on = ["BNODE", "ANODE"])
-        hwylink_rev_set = set(hwylink_rev_df.ABB_x.to_list())
-
-        fields = ["SHAPE@", "ANODE", "BNODE", "ABB"]
-
-        geom_dict = {}
-
-        with arcpy.da.SearchCursor(hwylink_fc, fields) as scursor:
-            for row in scursor:
-
-                geom = row[0]
-                anode = row[1]
-                bnode = row[2]
-                abb = row[3]
-
-                multi_array = arcpy.Array()
-                for part in geom:
-                    part_array = arcpy.Array([point for point in part])
-                    multi_array.append(part_array)
-                    
-                polyline = arcpy.Polyline(multi_array, spatial_reference = 26771)
-
-                geom_dict[(anode, bnode)] = {"ABB": abb, "GEOM": polyline}
-                if abb not in hwylink_rev_set:
-                    geom_dict[(bnode, anode)] = {"ABB": abb, "GEOM": polyline}
-
-        print("Geometry dictionary built.\n")
-
-        return geom_dict
-
     # method that collapses routes
     def collapse_bus_routes(self):
 
@@ -139,8 +95,6 @@ class BusHighwayNetwork(HighwayNetwork):
 
         mhn_in_gdb = self.mhn_in_gdb
         bn_out_folder = self.bn_out_folder
-
-        geom_dict = self.geom_dict
 
         cr_gdb_name = "collapsed_routes.gdb"
         arcpy.management.CreateFileGDB(bn_out_folder, cr_gdb_name)
@@ -236,8 +190,6 @@ class BusHighwayNetwork(HighwayNetwork):
 
         scenario_dict = self.scenario_dict
         bn_out_folder = self.bn_out_folder
-
-        geom_dict = self.geom_dict
 
         mhn_all_gdb = os.path.join(self.mhn_out_folder, "MHN_all.gdb")
 
@@ -434,6 +386,53 @@ class BusHighwayNetwork(HighwayNetwork):
 
     # HELPER METHODS ------------------------------------------------------------------------------
 
+    # helper method that builds node geometry dict
+
+    # helper method that builds link geometry dict
+    def build_geom_dict(self):
+
+        print("Building geometry dictionary of all highway links...")
+
+        mhn_in_gdb = self.mhn_in_gdb
+
+        link_fields = ["ANODE", "BNODE", "ABB", "DIRECTIONS"]
+
+        hwylink_fc = os.path.join(mhn_in_gdb, "hwynet", "hwynet_arc")
+        hwylink_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(hwylink_fc, link_fields)], 
+            columns = link_fields)
+
+        hwylink_rev_df = pd.merge(hwylink_df, hwylink_df.copy(), 
+                                  left_on = ["ANODE", "BNODE"], right_on = ["BNODE", "ANODE"])
+        hwylink_rev_set = set(hwylink_rev_df.ABB_x.to_list())
+
+        fields = ["SHAPE@", "ANODE", "BNODE", "ABB"]
+
+        geom_dict = {}
+
+        with arcpy.da.SearchCursor(hwylink_fc, fields) as scursor:
+            for row in scursor:
+
+                geom = row[0]
+                anode = row[1]
+                bnode = row[2]
+                abb = row[3]
+
+                multi_array = arcpy.Array()
+                for part in geom:
+                    part_array = arcpy.Array([point for point in part])
+                    multi_array.append(part_array)
+                    
+                polyline = arcpy.Polyline(multi_array, spatial_reference = 26771)
+
+                geom_dict[(anode, bnode)] = {"ABB": abb, "GEOM": polyline}
+                if abb not in hwylink_rev_set:
+                    geom_dict[(bnode, anode)] = {"ABB": abb, "GEOM": polyline}
+
+        print("Geometry dictionary built.\n")
+
+        return geom_dict
+
     # helper method to read csv into df
     def read_csv_to_df(self, file_path):
         '''
@@ -478,6 +477,20 @@ class BusHighwayNetwork(HighwayNetwork):
 
         if fc_name == "bus_future":
             return
+        
+        # fix issue with starting after midnight
+        fields = ["START", "STARTHOUR"]
+
+        with arcpy.da.UpdateCursor(output_fc, fields) as ucursor:
+            for row in ucursor:
+
+                if row[0] >= 86400:
+                    row[0] = row[0] - 86400
+
+                if row[1] >= 24:
+                    row[1] = row[1] - 24
+
+                ucursor.updateRow(row)
 
         arcpy.management.CalculateField(
             in_table = output_fc,
@@ -654,9 +667,7 @@ class BusHighwayNetwork(HighwayNetwork):
 
         # get rep routes 
         rep_tod_fc = os.path.join(tod_fd, f"rep_{which_bus}_{tod}")
-        rep_routes = pd.DataFrame(
-            data = [row for row in arcpy.da.SearchCursor(rep_tod_fc, ["TRANSIT_LINE"])], 
-            columns = ["TRANSIT_LINE"]).TRANSIT_LINE.to_list()
+        rep_routes = [row[0] for row in arcpy.da.SearchCursor(rep_tod_fc, ["TRANSIT_LINE"])]
         
         # get rep itins
         fields = ["SHAPE@", "TRANSIT_LINE", "ITIN_ORDER", 
@@ -707,7 +718,8 @@ class BusHighwayNetwork(HighwayNetwork):
 
                         itin_order+= 1
                         row = [None, tr_line, itin_order, itin_b, next_a,
-                               None, 0, 1, 0, 1, 1, "Itin Gap"]
+                               # abb, layover, dwc, zfare, lst, ttf, notes
+                               None, 0, 1, 0, 0, 1, "Itin Gap"] 
                         icursor.insertRow(row)
 
     # helper method which makes tod highway networks 
@@ -1006,8 +1018,10 @@ class BusHighwayNetwork(HighwayNetwork):
         arcpy.management.CreateFeatureclass(tod_fd, f"rep_itin_{tod}", "POLYLINE", itin_gtfs_fc)
         rep_itin_fc = os.path.join(tod_fd, f"rep_itin_{tod}")
 
-        fields = ["TRANSIT_LINE", "ITIN_ORDER", 
+        fields = ["SHAPE@", "TRANSIT_LINE", "ITIN_ORDER", 
                   "ITIN_A", "ITIN_B"]
+        
+        print(reroute_dict)
         
         with arcpy.da.InsertCursor(rep_itin_fc, fields) as icursor:
 
@@ -1028,8 +1042,12 @@ class BusHighwayNetwork(HighwayNetwork):
                     itin_a = record["ITIN_A"]
                     itin_b = record["ITIN_B"]
 
+                    geom = None
+                    if (itin_a, itin_b) in self.geom_dict:
+                        geom = self.geom_dict[(itin_a, itin_b)]["GEOM"]
+
                     icursor.insertRow(
-                        [transit_line, itin_order, itin_a, itin_b]
+                        [geom, transit_line, itin_order, itin_a, itin_b]
                     )
 
     # helper method that finds the replaced headway
@@ -1048,3 +1066,9 @@ class BusHighwayNetwork(HighwayNetwork):
             return 0
         
     # helper method that makes usable line itin
+    def make_usable_line_itin(self, line_itin, mr_id):
+
+        # first- reroute
+        anodes = [record["ITIN_A"] for record in line_itin]
+        bnodes = [record["ITIN_B"] for record in line_itin]
+

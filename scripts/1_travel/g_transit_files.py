@@ -1,6 +1,7 @@
 ## u_create_bus_layers.py
 
 from modules.BHN import BusHighwayNetwork
+from modules.RN import RailNetwork
 
 import os
 import sys
@@ -19,7 +20,9 @@ if __name__ == "__main__":
     BHN.create_bus_layers()
 
     # create rail networks
-    
+    # RN = RailNetwork()
+    # RN.create_rn_folder()
+    # RN.collapse_rail_routes()
 
     end_time = time.time()
     total_time = round(end_time - start_time)
