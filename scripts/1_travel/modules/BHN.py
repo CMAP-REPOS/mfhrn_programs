@@ -59,18 +59,9 @@ class BusHighwayNetwork(HighwayNetwork):
                 "hdwy_mult": 1}
         }
 
-        self.headway_dict = {
-            20: 600, 21: 600, 22: 600, 23: 600, 0: 600, 1: 600, 2: 600, 3: 600, 4: 600, 5: 600, 
-            6: 60, 
-            7: 120, 8: 120, 
-            9: 60, 
-            10: 240, 11: 240, 12: 240, 13: 240, 
-            14: 120, 15: 120, 
-            16: 120, 17: 120, 
-            18: 120, 19: 120}
+        self.default_speed = 30
         
         self.ETN = EmmeTravelNetwork()
-
 
         self.geom_dict = self.build_geom_dict()
 
@@ -120,12 +111,14 @@ class BusHighwayNetwork(HighwayNetwork):
                 for row in scursor:
                     icursor.insertRow(row)
 
+        itin_fields = ["TRANSIT_LINE", "ITIN_ORDER", "ITIN_A", "ITIN_B", "ABB",
+                       "DWELL_CODE", "LINE_SERV_TIME", "TTF"]
+
         # get dfs + dict for bus base itin
         base_itin = os.path.join(mhn_in_gdb, "bus_base_itin")
-        base_itin_fields = [f.name for f in arcpy.ListFields(base_itin) if (f.name != "OBJECTID")]
         base_itin_df = pd.DataFrame(
-            data = [row for row in arcpy.da.SearchCursor(base_itin, base_itin_fields)],
-            columns = base_itin_fields
+            data = [row for row in arcpy.da.SearchCursor(base_itin, itin_fields)],
+            columns = itin_fields
         ).sort_values(["TRANSIT_LINE", "ITIN_ORDER"])
 
         base_itin_dict = {k: v.to_dict(orient='records') for k, v in base_itin_df.groupby("TRANSIT_LINE")}
@@ -133,10 +126,9 @@ class BusHighwayNetwork(HighwayNetwork):
 
         # get dfs + dicts for bus current itin
         current_itin = os.path.join(mhn_in_gdb, "bus_current_itin")
-        current_itin_fields = [f.name for f in arcpy.ListFields(current_itin) if (f.name != "OBJECTID")]
         current_itin_df = pd.DataFrame(
-            data = [row for row in arcpy.da.SearchCursor(current_itin, current_itin_fields)],
-            columns = current_itin_fields
+            data = [row for row in arcpy.da.SearchCursor(current_itin, itin_fields)],
+            columns = itin_fields
         ).sort_values(["TRANSIT_LINE", "ITIN_ORDER"])
 
         current_itin_dict = {k: v.to_dict(orient='records') for k, v in current_itin_df.groupby("TRANSIT_LINE")}
@@ -144,10 +136,9 @@ class BusHighwayNetwork(HighwayNetwork):
 
         # get dfs + dicts for bus future itin
         future_itin = os.path.join(mhn_in_gdb, "bus_future_itin")
-        future_itin_fields = [f.name for f in arcpy.ListFields(future_itin) if (f.name != "OBJECTID")]
         future_itin_df = pd.DataFrame(
-            data = [row for row in arcpy.da.SearchCursor(future_itin, future_itin_fields)],
-            columns = future_itin_fields
+            data = [row for row in arcpy.da.SearchCursor(future_itin, itin_fields)],
+            columns = itin_fields
         ).sort_values(["TRANSIT_LINE", "ITIN_ORDER"])
 
         future_itin_dict = {k: v.to_dict(orient='records') for k, v in future_itin_df.groupby("TRANSIT_LINE")}
@@ -226,167 +217,14 @@ class BusHighwayNetwork(HighwayNetwork):
 
                 # find bus networks
                 reroute_dict = self.create_tod_bus_runs(scen, tod)
-                self.create_tod_bus_itins(scen, tod, reroute_dict)
+                self.create_tod_bus_itins(scen, tod, reroute_dict, G)
 
         # Use TOD 3 highways for AM transit
-
-    # method that imports gtfs lines and segments
-    # NOTE - NOT COMPLETE!!
-    def import_gtfs_bus_routes(self, which_gtfs):
-
-        print(f"Importing {which_gtfs} GTFS lines and segments...")
-
-        import_lines = os.path.join(
-            self.mhn_in_folder, f"import_bus_lines_{which_gtfs}.csv")
-        import_segments = os.path.join(
-            self.mhn_in_folder, f"import_bus_segments_{which_gtfs}.csv")
-        
-        lines_df = self.read_csv_to_df(import_lines)
-        segments_df = self.read_csv_to_df(import_segments)
-
-        line_ids = set(lines_df.transit_line.to_list())
-        segment_ids = set(lines_df.transit_line.to_list())
-
-        if (len(line_ids - segment_ids) > 0):
-            sys.exit("Lines exist without corresponding segments.")
-        if (len(segment_ids - line_ids) > 0):
-            sys.exit("Segments exist without corresponding lines.")
-
-        # lines - transit line must be unique
-        pk_lines = lines_df.transit_line.value_counts()
-
-        if (pk_lines.max() > 1):
-            sys.exit("Lines cannot be uniquely identified by transit_line.")
-
-        # segments - transit_line/itin_order combinations must be unique
-        pk_segments_df = segments_df.groupby(["transit_line", "itin_order"]).size().reset_index()
-        pk_segments_df = pk_segments_df.rename(columns = {0: "group_size"})
-        
-        if (pk_segments_df["group_size"].max() > 1):
-            sys.exit("Segments cannot be uniquely identified by transit_line + itin_order.")
-
-        hwylink_fc = os.path.join(self.current_gdb, "hwynet", "hwynet_arc")
-        bus_lines_fc = os.path.join(self.current_gdb, "hwynet", f"bus_{which_gtfs}")
-        bus_itin_table = os.path.join(self.current_gdb, f"bus_{which_gtfs}_itin")
-
-        # delete all rows
-        arcpy.management.TruncateTable(bus_lines_fc)
-        arcpy.management.TruncateTable(bus_itin_table)
-
-        # import transit lines
-        lines_records = lines_df.sort_values("transit_line").to_dict("records")
-
-        not_fields = ["Shape", "Shape_Length", "OBJECTID"]
-        line_fields = ["SHAPE@"] + [f.name for f in arcpy.ListFields(bus_lines_fc) if (f.name not in not_fields)]
-        lf_dict = {field: index for index, field in enumerate(line_fields)}
-        
-        with arcpy.da.InsertCursor(bus_lines_fc, line_fields) as icursor:
-            for record in lines_records:
-
-                row = [None] * len(line_fields)
-                row[lf_dict["TRANSIT_LINE"]] = record["transit_line"]
-                
-                # put together description
-                longname = record["longname"]
-                route_id = longname.split()[0].split("-")[0]
-                desc = route_id + " " + longname.split(maxsplit = 2)[2]
-                desc = desc[0:50]
-
-                row[lf_dict["DESCRIPTION"]] = desc
-                row[lf_dict["MODE"]] = record["mode"]
-                row[lf_dict["VEHICLE_TYPE"]] = record["vehicle_type"]
-
-                row[lf_dict["SPEED"]] = 15
-                row[lf_dict["ROUTE_ID"]] = route_id
-                row[lf_dict["DIRECTION"]] = record["direction"]
-
-                row[lf_dict["START"]] = int(float(record["start"])) * 60
-                starthour = int(float(record["starthour"]))
-                row[lf_dict["STARTHOUR"]] = starthour
-
-                row[lf_dict["HEADWAY"]] = self.headway_dict[starthour]
-
-                row[lf_dict["FEEDLINE"]] = record["feedline"]
-
-                icursor.insertRow(row)
-
-        # import transit segments
-        segments_df["itin_order"] = segments_df["itin_order"].astype(int)
-        segments_sorted_df = segments_df.sort_values(["transit_line", "itin_order"])
-        segments_records = segments_sorted_df.to_dict("records")
-
-        # make hwylink dict
-        hwylink_dict = {}
-        with arcpy.da.SearchCursor(hwylink_fc, ["ANODE", "BNODE", "ABB"]) as scursor:
-            for row in scursor:
-
-                anode = row[0]
-                bnode = row[1]
-                abb = row[2]
-
-                hwylink_dict[(anode, bnode)] = abb
-                hwylink_dict[(bnode, anode)] = abb
-
-        segments_fields = [f.name for f in arcpy.ListFields(bus_itin_table) if (f.name != "OBJECTID")]
-        sf_dict = {field: index for index, field in enumerate(segments_fields)}
-
-        with arcpy.da.InsertCursor(bus_itin_table, segments_fields) as icursor:
-            for record in segments_records:
-
-                row = [None] * len(segments_fields)
-
-                row[sf_dict["TRANSIT_LINE"]] = record["transit_line"]
-                row[sf_dict["ITIN_ORDER"]] = record["itin_order"]
-
-                itin_a = int(record["itin_a"])
-                row[sf_dict["ITIN_A"]] = itin_a
-                itin_b = int(record["itin_b"])
-                row[sf_dict["ITIN_B"]] = itin_b
-
-                if (itin_a, itin_b) in hwylink_dict:
-                    abb = hwylink_dict[(itin_a, itin_b)]
-                    row[sf_dict["ABB"]] = abb
-
-                icursor.insertRow(row)
-
-        print(f"{which_gtfs} GTFS lines and segments imported.")
-
-    # method that resolve the highway geometry
-    # NOTE - NOT COMPLETE!!
-    def resolve_hwy_geometry(self):
-
-        # we can... we can fix this later... 
-
-        in_path = os.path.join(self.mhn_in_folder, "MHN.gdb")
-        out_path = os.path.join(self.mhn_out_folder, f"MHN_{self.base_year}.gdb")
-
-        in_fd = os.path.join(in_path, "hwynet")
-        in_link_fc = os.path.join(in_fd, f"hwynet_arc")
-
-        out_fd = os.path.join(out_path, f"hwynet")
-        out_node_fc = os.path.join(out_fd, f"hwynet_node")
-        out_link_fc = os.path.join(out_fd, f"hwynet_arc")
-
-        # find deleted links and drop 
-        in_abbs = set([row[0] for row in arcpy.da.SearchCursor(in_link_fc, "ABB")])
-        out_abbs = set([row[0] for row in arcpy.da.SearchCursor(out_link_fc, "ABB")])
-        
-        del_abbs = in_abbs - out_abbs
-
-        remaining_anodes = set([row[0] for row in arcpy.da.SearchCursor(out_link_fc, "ANODE")])
-        remaining_bnodes = set([row[0] for row in arcpy.da.SearchCursor(out_link_fc, "BNODE")])
-        remaining_nodes = remaining_anodes | remaining_bnodes
-        
-        # remove nodes which do not exist anymore
-        with arcpy.da.UpdateCursor(out_node_fc, "NODE") as ucursor:
-            for row in ucursor:
-
-                if row[0] not in remaining_nodes:
-                    ucursor.deleteRow()
 
     # HELPER METHODS ------------------------------------------------------------------------------
 
     # helper method that builds node geometry dict
+
 
     # helper method that builds link geometry dict
     def build_geom_dict(self):
@@ -406,7 +244,7 @@ class BusHighwayNetwork(HighwayNetwork):
                                   left_on = ["ANODE", "BNODE"], right_on = ["BNODE", "ANODE"])
         hwylink_rev_set = set(hwylink_rev_df.ABB_x.to_list())
 
-        fields = ["SHAPE@", "ANODE", "BNODE", "ABB"]
+        fields = ["SHAPE@", "ANODE", "BNODE", "ABB", "MILES"]
 
         geom_dict = {}
 
@@ -417,6 +255,7 @@ class BusHighwayNetwork(HighwayNetwork):
                 anode = row[1]
                 bnode = row[2]
                 abb = row[3]
+                miles = row[4]
 
                 multi_array = arcpy.Array()
                 for part in geom:
@@ -425,38 +264,14 @@ class BusHighwayNetwork(HighwayNetwork):
                     
                 polyline = arcpy.Polyline(multi_array, spatial_reference = 26771)
 
-                geom_dict[(anode, bnode)] = {"ABB": abb, "GEOM": polyline}
+                geom_dict[(anode, bnode)] = {"ABB": abb, "GEOM": polyline, "MILES": miles}
                 if abb not in hwylink_rev_set:
-                    geom_dict[(bnode, anode)] = {"ABB": abb, "GEOM": polyline}
+                    geom_dict[(bnode, anode)] = {"ABB": abb, "GEOM": polyline, "MILES": miles}
 
         print("Geometry dictionary built.\n")
 
         return geom_dict
 
-    # helper method to read csv into df
-    def read_csv_to_df(self, file_path):
-        '''
-        Function that reads Nick's GTFS tables without error -- 
-        (usually reads the LINESTRING as separate columns because of the commas)
-        parameter: 
-            - file_path - path to the csv file (string)
-        '''
-        prepped_line_info = []
-        with open(file_path, 'r', encoding = "utf-8") as f:
-            reader = csv.reader(f)
-            header = next(reader)
-            body_rows = [row for row in reader]
-            for row in body_rows:
-                index_linestring = next((i for i, item in enumerate(row) if 'LINESTRING' in item), None)
-                linestring_content = row[index_linestring:]
-                linestring_element = ','.join(linestring_content)
-                row = row[:index_linestring]
-                row.append(linestring_element)
-                prepped_line_info.append(row)
-        table = pd.DataFrame(prepped_line_info, columns=header)
-
-        return table
-    
     # helper method to copy fcs to collapse routes
     def copy_bus_fcs(self, fc_name):
 
@@ -657,8 +472,7 @@ class BusHighwayNetwork(HighwayNetwork):
         add_fields = [
             ["TRANSIT_LINE", "TEXT"], ["ITIN_ORDER", "SHORT"],
             ["ITIN_A", "LONG"], ["ITIN_B", "LONG"],
-            ["ABB", "TEXT"], ["LAYOVER", "SHORT"],
-            ["DWELL_CODE", "TEXT"], ["ZONE_FARE", "SHORT"],
+            ["ABB", "TEXT"], ["DWELL_CODE", "TEXT"], 
             ["LINE_SERV_TIME", "FLOAT"], ["TTF", "FLOAT"],
             ["NOTES", "TEXT"]
         ]
@@ -671,8 +485,8 @@ class BusHighwayNetwork(HighwayNetwork):
         
         # get rep itins
         fields = ["SHAPE@", "TRANSIT_LINE", "ITIN_ORDER", 
-                  "ITIN_A", "ITIN_B", "ABB", "LAYOVER", "DWELL_CODE",
-                  "ZONE_FARE", "LINE_SERV_TIME", "TTF", "NOTES"]
+                  "ITIN_A", "ITIN_B", "ABB", 
+                  "DWELL_CODE", "LINE_SERV_TIME", "TTF", "NOTES"]
         with arcpy.da.InsertCursor(itin_tod_fc, fields) as icursor:
             for tr_line in itin_dict:
 
@@ -690,9 +504,7 @@ class BusHighwayNetwork(HighwayNetwork):
                     itin_a = record["ITIN_A"]
                     itin_b = record["ITIN_B"]
                     abb = record["ABB"]
-                    layover = record["LAYOVER"]
                     dwc = record["DWELL_CODE"]
-                    zfare = record["ZONE_FARE"]
                     lst = record["LINE_SERV_TIME"]
                     ttf = record["TTF"]
 
@@ -704,7 +516,7 @@ class BusHighwayNetwork(HighwayNetwork):
                         notes = "Itin Gap"
                     
                     row = [geom, tr_line, itin_order, itin_a, itin_b,
-                           abb, layover, dwc, zfare, lst, ttf, notes]
+                           abb, dwc, lst, ttf, notes]
                     icursor.insertRow(row)
 
                     if i == len(itin) - 1:
@@ -718,9 +530,13 @@ class BusHighwayNetwork(HighwayNetwork):
 
                         itin_order+= 1
                         row = [None, tr_line, itin_order, itin_b, next_a,
-                               # abb, layover, dwc, zfare, lst, ttf, notes
-                               None, 0, 1, 0, 0, 1, "Itin Gap"] 
+                               # abb, dwc, lst, ttf, notes
+                               None, 1, 0, 1, "Itin Gap"] 
                         icursor.insertRow(row)
+
+
+
+
 
     # helper method which makes tod highway networks 
     def create_tod_hwy_networks(self, scen, tod):
@@ -822,11 +638,11 @@ class BusHighwayNetwork(HighwayNetwork):
         rep_gtfs_fc = os.path.join(scen_gdb, f"TOD_{tod}", f"rep_{which_gtfs}_{tod}") 
         arcpy.management.CopyFeatures(in_fc, rep_gtfs_fc)
 
+        # REP FUTURE FC
         in_fc = os.path.join(cr_gdb, f"TOD_{tod}", f"rep_future_{tod}")
         where_clause = f"SCENARIO LIKE '%{scen}%'"
         arcpy.management.MakeFeatureLayer(in_fc, "in_layer", where_clause)
-
-        # REP FUTURE FC
+        
         rep_future_fc = os.path.join(scen_gdb, f"TOD_{tod}", f"rep_future_{tod}")
 
         arcpy.management.CopyFeatures("in_layer", rep_future_fc)
@@ -974,8 +790,23 @@ class BusHighwayNetwork(HighwayNetwork):
 
         return reroute_dict
 
+    # helper method that finds the replaced headway
+    def find_replaced_headway(self, replace_mrids, replace_hdwys):
+
+        headways = []
+
+        for pair in replace_hdwys:
+
+            if pair[0] in replace_mrids:
+                headways.append(pair[1])
+
+        if len(headways) > 0:
+            return min(headways)
+        else:
+            return 0
+
     # helper method which makes tod bus itineraries
-    def create_tod_bus_itins(self, scen, tod, reroute_dict):
+    def create_tod_bus_itins(self, scen, tod, reroute_dict, G):
 
         bn_out_folder = self.bn_out_folder
 
@@ -1019,9 +850,8 @@ class BusHighwayNetwork(HighwayNetwork):
         rep_itin_fc = os.path.join(tod_fd, f"rep_itin_{tod}")
 
         fields = ["SHAPE@", "TRANSIT_LINE", "ITIN_ORDER", 
-                  "ITIN_A", "ITIN_B"]
-        
-        print(reroute_dict)
+                  "ITIN_A", "ITIN_B", "ABB", 
+                  "DWELL_CODE", "LINE_SERV_TIME", "TTF", "NOTES"]
         
         with arcpy.da.InsertCursor(rep_itin_fc, fields) as icursor:
 
@@ -1036,39 +866,156 @@ class BusHighwayNetwork(HighwayNetwork):
                 elif transit_line in itin_future_dict:
                     line_itin = itin_future_dict[transit_line]
 
-                for record in line_itin:
+                final_itin = self.make_final_line_itin(transit_line, line_itin,
+                                           mr_id, reroute_dict, itin_future_dict, G)
+
+                for record in final_itin:
 
                     itin_order = record["ITIN_ORDER"]
                     itin_a = record["ITIN_A"]
                     itin_b = record["ITIN_B"]
+                    abb = record["ABB"]
 
-                    geom = None
-                    if (itin_a, itin_b) in self.geom_dict:
-                        geom = self.geom_dict[(itin_a, itin_b)]["GEOM"]
+                    dwc = record["DWELL_CODE"]
+                    lst = record["LINE_SERV_TIME"]
+                    ttf = record["TTF"]
+                    notes = record["NOTES"]
+
+                    geom = self.geom_dict[(itin_a, itin_b)]["GEOM"]
 
                     icursor.insertRow(
-                        [geom, transit_line, itin_order, itin_a, itin_b]
+                        [geom, transit_line, itin_order, 
+                         itin_a, itin_b, abb, 
+                         dwc, lst, ttf, notes]
                     )
 
-    # helper method that finds the replaced headway
-    def find_replaced_headway(self, replace_mrids, replace_hdwys):
-
-        headways = []
-
-        for pair in replace_hdwys:
-
-            if pair[0] in replace_mrids:
-                headways.append(pair[1])
-
-        if len(headways) > 0:
-            return min(headways)
-        else:
-            return 0
-        
-    # helper method that makes usable line itin
-    def make_usable_line_itin(self, line_itin, mr_id):
+    # helper method that makes final line itin
+    def make_final_line_itin(self, transit_line, line_itin, mr_id, 
+                              reroute_dict, itin_future_dict, G):
 
         # first- reroute
         anodes = [record["ITIN_A"] for record in line_itin]
         bnodes = [record["ITIN_B"] for record in line_itin]
 
+        # attempt to reroute
+        if mr_id in reroute_dict:
+
+            reroute = 0
+            reroute_lines = reroute_dict[mr_id]
+
+            for reroute_line in reroute_lines:
+
+                reroute_itin = itin_future_dict[reroute_line]
+                start_node = reroute_itin[0]["ITIN_A"]
+                end_node = reroute_itin[-1]["ITIN_B"]
+
+                if start_node in anodes and end_node in bnodes:
+
+                    start_index = anodes.index(start_node)
+                    end_index = bnodes.index(end_node)
+
+                    if start_index <= end_index:
+
+                        first_part = line_itin[: start_index]
+                        reroute_part = reroute_itin
+                        last_part = line_itin[end_index + 1:]
+
+                        line_itin = first_part + reroute_part + last_part
+                        reroute = 1
+
+            # if reroute == 0:
+            #     print("Can't reroute " + transit_line)
+
+        # check if first and last nodes are in graph
+        if anodes[0] not in G:
+            return []
+        if bnodes[-1] not in G:
+            return []
+
+        # make final itinerary
+        final_itin = []
+
+        i = 0 # counter that loops through original itin
+        itin_order = 0
+
+        while i < len(line_itin):
+
+            record = line_itin[i]
+            itin_a = record["ITIN_A"]
+            itin_b = record["ITIN_B"]
+
+            # segment is in network
+            if G.has_edge(itin_a, itin_b):
+                itin_order += 1
+                record["ITIN_ORDER"] = itin_order
+                final_itin.append(record)
+
+                i+= 1
+            # segment is not in network
+            else:
+
+                i += 1
+                dwc = record["DWELL_CODE"]
+                ttf = record["TTF"]
+
+                # get consecutive missing segments
+                while i < len(line_itin):
+
+                    recordx = line_itin[i]
+                    itin_ax = recordx["ITIN_A"]
+                    itin_bx = recordx["ITIN_B"]
+                    dwcx = recordx["DWELL_CODE"]
+                    ttfx = recordx["TTF"]
+
+                    if G.has_edge(itin_ax, itin_bx):
+                        break
+
+                    else:
+                        
+                        itin_b = itin_bx
+                        dwc = dwcx
+                        ttf = ttfx
+                        i += 1
+
+                # is there a path
+                if nx.has_path(G, itin_a, itin_b):
+                    
+                    # find shortest path
+                    path = nx.shortest_path(G, itin_a, itin_b)
+
+                    for j in range(0, len(path) - 1):
+
+                        record = {}
+
+                        itin_order += 1
+                        record["ITIN_ORDER"] = itin_order
+                        record["ITIN_A"] = path[j]
+                        record["ITIN_B"] = path[j+1]
+                        record["ABB"] = self.geom_dict[(path[j], path[j+1])]["ABB"]
+
+                        # assume stop
+                        dwcj = 0
+
+                        # if mode is E or Q - change to non-stop
+                        if transit_line[0] in ["e", "q"]:
+                            dwcj = 1
+
+                        if j == len(path) - 2:
+                            dwcj = dwc
+
+                        record["DWELL_CODE"] = dwcj
+
+                        miles = self.geom_dict[(path[j], path[j+1])]["MILES"]
+                        record["LINE_SERV_TIME"] = max(miles * (60/ self.default_speed), 0.1)
+
+                        record["TTF"] = ttf
+                        record["NOTES"] = "Shortest Path"
+
+                        final_itin.append(record)
+
+                else:
+                    return []
+        
+        return final_itin
+    
+    # find nearest node
