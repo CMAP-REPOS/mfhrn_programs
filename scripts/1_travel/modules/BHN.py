@@ -63,7 +63,8 @@ class BusHighwayNetwork(HighwayNetwork):
         
         self.ETN = EmmeTravelNetwork()
 
-        self.geom_dict = self.build_geom_dict()
+        self.node_dict = self.build_node_dict()
+        self.link_dict = self.build_link_dict()
 
     # MAIN METHODS --------------------------------------------------------------------------------
 
@@ -100,15 +101,28 @@ class BusHighwayNetwork(HighwayNetwork):
 
         # copy park n ride table
         input_table = os.path.join(mhn_in_gdb, "parknride")
-        arcpy.management.CreateTable(cr_gdb, "parknride", template = input_table)
-        output_table = os.path.join(cr_gdb, "parknride")
+        arcpy.management.CreateFeatureclass(cr_gdb, "parknride", "POINT", spatial_reference = 26771)
+        add_fields = [
+            ["FACILITY", "TEXT"], ["NODE", "LONG"],
+            ["COST", "SHORT"], ["SPACES", "SHORT"],
+            ["ESTIMATE", "SHORT"], ["SCENARIO", "TEXT"]
+        ]
+        output_fc = os.path.join(cr_gdb, "parknride")
+        arcpy.management.AddFields(output_fc, add_fields)
 
-        fields = [f.name for f in arcpy.ListFields(input_table) if (f.name != "OBJECTID")]
+        sfields = ["FACILITY", "NODE", "COST", "SPACES", "ESTIMATE", "SCENARIO"]
+        ifields = sfields + ["SHAPE@"]
 
-        with arcpy.da.SearchCursor(input_table, fields) as scursor:
-            with arcpy.da.InsertCursor(output_table, fields) as icursor:
+        with arcpy.da.SearchCursor(input_table, sfields) as scursor:
+            with arcpy.da.InsertCursor(output_fc, ifields) as icursor:
 
                 for row in scursor:
+                    
+                    node = row[1]
+                    geom = self.node_dict[node]["GEOM"]
+
+                    row = list(row) + [geom]
+
                     icursor.insertRow(row)
 
         itin_fields = ["TRANSIT_LINE", "ITIN_ORDER", "ITIN_A", "ITIN_B", "ABB",
@@ -206,7 +220,7 @@ class BusHighwayNetwork(HighwayNetwork):
             arcpy.management.Delete("input_links_layer")
 
             # for each tod
-            for tod in [1, 2, 3, 4]:
+            for tod in [1]:
 
                 print(f"Creating bus layers for scenario {scen} TOD {tod}...")
 
@@ -219,17 +233,39 @@ class BusHighwayNetwork(HighwayNetwork):
                 reroute_dict = self.create_tod_bus_runs(scen, tod)
                 self.create_tod_bus_itins(scen, tod, reroute_dict, G)
 
-        # Use TOD 3 highways for AM transit
-
     # HELPER METHODS ------------------------------------------------------------------------------
 
     # helper method that builds node geometry dict
+    def build_node_dict(self):
 
+        print("Building dictionary of all highway nodes...")
+
+        mhn_in_gdb = self.mhn_in_gdb
+
+        node_fields = ["NODE", "SHAPE@X", "SHAPE@Y", "zone17"]
+
+        hwynode_fc = os.path.join(mhn_in_gdb, "hwynet", "hwynet_node")
+
+        node_dict = {}
+
+        with arcpy.da.SearchCursor(hwynode_fc, node_fields) as scursor:
+            for row in scursor:
+
+                node = row[0]
+                point = arcpy.Point(row[1], row[2])
+                geom = arcpy.PointGeometry(point, spatial_reference = 26771)
+                zone = row[3]
+
+                node_dict[node] = {"GEOM": geom, "ZONE": zone}
+
+        print("Node dictionary built.")
+
+        return node_dict
 
     # helper method that builds link geometry dict
-    def build_geom_dict(self):
+    def build_link_dict(self):
 
-        print("Building geometry dictionary of all highway links...")
+        print("Building dictionary of all highway links...")
 
         mhn_in_gdb = self.mhn_in_gdb
 
@@ -244,11 +280,11 @@ class BusHighwayNetwork(HighwayNetwork):
                                   left_on = ["ANODE", "BNODE"], right_on = ["BNODE", "ANODE"])
         hwylink_rev_set = set(hwylink_rev_df.ABB_x.to_list())
 
-        fields = ["SHAPE@", "ANODE", "BNODE", "ABB", "MILES"]
+        link_fields = ["SHAPE@", "ANODE", "BNODE", "ABB", "MILES"]
 
-        geom_dict = {}
+        link_dict = {}
 
-        with arcpy.da.SearchCursor(hwylink_fc, fields) as scursor:
+        with arcpy.da.SearchCursor(hwylink_fc, link_fields) as scursor:
             for row in scursor:
 
                 geom = row[0]
@@ -264,13 +300,13 @@ class BusHighwayNetwork(HighwayNetwork):
                     
                 polyline = arcpy.Polyline(multi_array, spatial_reference = 26771)
 
-                geom_dict[(anode, bnode)] = {"ABB": abb, "GEOM": polyline, "MILES": miles}
+                link_dict[(anode, bnode)] = {"ABB": abb, "GEOM": polyline, "MILES": miles}
                 if abb not in hwylink_rev_set:
-                    geom_dict[(bnode, anode)] = {"ABB": abb, "GEOM": polyline, "MILES": miles}
+                    link_dict[(bnode, anode)] = {"ABB": abb, "GEOM": polyline, "MILES": miles}
 
-        print("Geometry dictionary built.\n")
+        print("Link dictionary built.\n")
 
-        return geom_dict
+        return link_dict
 
     # helper method to copy fcs to collapse routes
     def copy_bus_fcs(self, fc_name):
@@ -460,7 +496,7 @@ class BusHighwayNetwork(HighwayNetwork):
     # helper method that finds representative itineraries
     def find_rep_itins(self, tod, which_bus, itin_dict):
 
-        geom_dict = self.geom_dict
+        link_dict = self.link_dict
 
         tod_fd = os.path.join(self.current_gdb, f"TOD_{tod}")
         itin_tod_fc = os.path.join(tod_fd, f"itin_{which_bus}_{tod}")
@@ -508,8 +544,8 @@ class BusHighwayNetwork(HighwayNetwork):
                     lst = record["LINE_SERV_TIME"]
                     ttf = record["TTF"]
 
-                    if (itin_a, itin_b) in geom_dict:
-                        geom = geom_dict[(itin_a, itin_b)]["GEOM"]
+                    if (itin_a, itin_b) in link_dict:
+                        geom = link_dict[(itin_a, itin_b)]["GEOM"]
                         notes = None
                     else:
                         geom = None
@@ -542,7 +578,7 @@ class BusHighwayNetwork(HighwayNetwork):
     def create_tod_hwy_networks(self, scen, tod):
 
         bn_out_folder = self.bn_out_folder
-        geom_dict = self.geom_dict
+        link_dict = self.link_dict
 
         scen_gdb = os.path.join(bn_out_folder, f"SCENARIO_{scen}.gdb")
 
@@ -593,8 +629,8 @@ class BusHighwayNetwork(HighwayNetwork):
                 anode = link[0]
                 bnode = link[1]
 
-                abb = geom_dict[(anode, bnode)]["ABB"]
-                geom = geom_dict[(anode, bnode)]["GEOM"]
+                abb = link_dict[(anode, bnode)]["ABB"]
+                geom = link_dict[(anode, bnode)]["GEOM"]
 
                 # miles
                 miles = hwylink_dict[link]["miles"]
@@ -881,7 +917,7 @@ class BusHighwayNetwork(HighwayNetwork):
                     ttf = record["TTF"]
                     notes = record["NOTES"]
 
-                    geom = self.geom_dict[(itin_a, itin_b)]["GEOM"]
+                    geom = self.link_dict[(itin_a, itin_b)]["GEOM"]
 
                     icursor.insertRow(
                         [geom, transit_line, itin_order, 
@@ -927,10 +963,27 @@ class BusHighwayNetwork(HighwayNetwork):
             #     print("Can't reroute " + transit_line)
 
         # check if first and last nodes are in graph
-        if anodes[0] not in G:
-            return []
-        if bnodes[-1] not in G:
-            return []
+        # if not - replace with their nearest node
+        first_node = anodes[0]
+        if first_node not in G:
+
+            replace_node = self.find_nearest_node(first_node, G)
+            if replace_node == None:
+                return []
+            
+            else:
+                line_itin[0]["ITIN_A"] = replace_node
+        
+        last_node = bnodes[-1]
+        if last_node not in G:
+
+            replace_node = self.find_nearest_node(last_node, G)
+
+            if replace_node == None:
+                return []
+            
+            else:
+                line_itin[-1]["ITIN_B"] = replace_node
 
         # make final itinerary
         final_itin = []
@@ -991,7 +1044,7 @@ class BusHighwayNetwork(HighwayNetwork):
                         record["ITIN_ORDER"] = itin_order
                         record["ITIN_A"] = path[j]
                         record["ITIN_B"] = path[j+1]
-                        record["ABB"] = self.geom_dict[(path[j], path[j+1])]["ABB"]
+                        record["ABB"] = self.link_dict[(path[j], path[j+1])]["ABB"]
 
                         # assume stop
                         dwcj = 0
@@ -1000,12 +1053,13 @@ class BusHighwayNetwork(HighwayNetwork):
                         if transit_line[0] in ["e", "q"]:
                             dwcj = 1
 
+                        # if last in segment - use original dwc
                         if j == len(path) - 2:
                             dwcj = dwc
 
                         record["DWELL_CODE"] = dwcj
 
-                        miles = self.geom_dict[(path[j], path[j+1])]["MILES"]
+                        miles = self.link_dict[(path[j], path[j+1])]["MILES"]
                         record["LINE_SERV_TIME"] = max(miles * (60/ self.default_speed), 0.1)
 
                         record["TTF"] = ttf
@@ -1019,3 +1073,38 @@ class BusHighwayNetwork(HighwayNetwork):
         return final_itin
     
     # find nearest node
+    def find_nearest_node(self, orig_node, G):
+
+        node_dict = self.node_dict
+
+        # this node straight up does not exist
+        if orig_node not in node_dict:
+            return None
+        
+        # no available nodes in graph
+        if G.number_of_nodes() == 0:
+            return None
+        
+        available_nodes = list(G.nodes)
+        
+        orig_node_loc = node_dict[orig_node]["GEOM"]
+
+        nearest_node = available_nodes[0]
+        comp_node_loc = node_dict[nearest_node]["GEOM"]
+
+        nearest_dist = orig_node_loc.distanceTo(comp_node_loc)
+
+        for node in available_nodes:
+
+            comp_node_loc = node_dict[node]["GEOM"]
+
+            dist = orig_node_loc.distanceTo(comp_node_loc)
+
+            if dist < nearest_dist:
+
+                nearest_dist = dist
+                nearest_node = node
+
+        print(orig_node, nearest_node)
+
+        return nearest_node
