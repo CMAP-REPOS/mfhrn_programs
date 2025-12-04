@@ -437,6 +437,196 @@ class HighwayNetwork:
 
         print("Base feature classes checked for errors.\n")
 
+    # method that imports highway project coding
+    def import_hwyproj_coding(self): 
+
+        print("Importing highway project coding...")
+
+        mhn_in_folder = self.mhn_in_folder
+        mhn_out_folder = self.mhn_out_folder
+        hwylink_df = self.hwylink_df 
+
+        import_path = os.path.join(mhn_in_folder, "import_hwyproj_coding.xlsx")
+
+        if not os.path.exists(import_path):
+            print("No highway projects imported. Checking base table for integrity.\n")
+            return
+
+        import_df = pd.read_excel(import_path)
+
+        import_df = import_df.dropna(how = "all")
+
+        if len(import_df) == 0:
+            print("No highway projects imported. Checking base table for integrity.\n")
+            return
+
+        # check where tipid, anode, bnode, action is null
+        null_df = import_df[pd.isnull(import_df.tipid) | 
+                            pd.isnull(import_df.anode) |
+                            pd.isnull(import_df.bnode) |
+                            pd.isnull(import_df.action)]
+        
+        import_errors_csv = os.path.join(mhn_out_folder, "import_project_coding_errors.csv")
+
+        if len(null_df) > 0:
+            null_df.to_csv(import_errors_csv, index = False)
+            sys.exit("Row(s) detected where TIPID, ANODE, BNODE, or ACTION is null. Crashing program.")
+
+        import_df = import_df.fillna(0)
+
+        # check where anode + bnode don't correspond to a valid link
+        abb_dict = hwylink_df[["ANODE", "BNODE", "ABB"]].set_index(["ANODE", "BNODE"]).to_dict("index")
+        import_records = import_df.to_dict("records")
+        bad_records = []
+
+        for row in import_records:
+
+            if (row["anode"], row["bnode"]) not in abb_dict:
+                bad_records.append(row)
+
+        if len(bad_records) > 0:
+            bad_records_df = pd.DataFrame(bad_records)
+            bad_records_df.to_csv(import_errors_csv, index = False)
+            sys.exit("Row(s) detected where ANODE and BNODE don't correspond to a valid link. Crashing program.")
+
+        # check where tipid-abb is not unique
+        import_df["abb"] = import_df.apply(lambda x: abb_dict[(x["anode"], x["bnode"])]["ABB"], axis = 1)
+        import_records = import_df.to_dict("records")
+
+        tipid_abb_series = import_df.groupby(["tipid", "abb"]).size()
+        duplicate_combos = tipid_abb_series[tipid_abb_series > 1].to_dict()
+
+        duplicate_records = []
+
+        for row in import_records:
+
+            if (row["tipid"], row["abb"]) in duplicate_combos:
+                duplicate_records.append(row)
+
+        if len(duplicate_records) > 0:
+            duplicate_records_df = pd.DataFrame(duplicate_records)
+            duplicate_records_df.to_csv(import_errors_csv, index = False)
+            sys.exit("Rows detected where TIPID - ABB is not unique. Crashing program.")
+
+        # now add to the table 
+        coding_table = os.path.join(self.current_gdb, "hwyproj_coding")    
+        fields = ["TIPID", "ABB"]
+        existing_list = []
+
+        with arcpy.da.SearchCursor(coding_table, fields) as scursor:
+
+            for row in scursor:
+                existing_list.append((row[0], row[1]))
+
+        delete_rows = []
+        update_rows = {}
+        insert_rows = []
+
+        for record in import_records:
+            tipid = record["tipid"]
+            abb = record["abb"]
+
+            if record["remove"] == "Y":
+                delete_rows.append((tipid, abb))
+            elif (tipid, abb) in existing_list:
+                update_rows[(tipid, abb)] = record
+            else:
+                insert_rows.append(record)
+
+        link_fields, lf_dict, coding_fields, cf_dict = self.get_hwy_fields()
+
+        # update and delete rows
+        with arcpy.da.UpdateCursor(coding_table, coding_fields) as ucursor:
+            for row in ucursor:
+                    
+                tipid = row[cf_dict["TIPID"]]
+                abb = row[cf_dict["ABB"]]
+
+                if (tipid, abb) in update_rows:
+
+                    new_attrs = update_rows[tipid, abb]
+                    row[cf_dict["ACTION_CODE"]] = new_attrs["action"]
+                    row[cf_dict["NEW_DIRECTIONS"]] = new_attrs["directions"]
+                    row[cf_dict["NEW_TYPE1"]] = new_attrs["type1"]
+                    row[cf_dict["NEW_TYPE2"]] = new_attrs["type2"]
+                    row[cf_dict["NEW_AMPM1"]] = new_attrs["ampm1"]
+                    row[cf_dict["NEW_AMPM2"]] = new_attrs["ampm2"]
+                    row[cf_dict["NEW_POSTEDSPEED1"]] = new_attrs["speed1"]
+                    row[cf_dict["NEW_POSTEDSPEED2"]] = new_attrs["speed2"]
+                    row[cf_dict["NEW_THRULANES1"]] = new_attrs["lanes1"]
+                    row[cf_dict["NEW_THRULANES2"]] = new_attrs["lanes2"]
+                    row[cf_dict["NEW_THRULANEWIDTH1"]] = new_attrs["feet1"]
+                    row[cf_dict["NEW_THRULANEWIDTH2"]] = new_attrs["feet2"]
+                    row[cf_dict["ADD_PARKLANES1"]] = new_attrs["parklanes1"]
+                    row[cf_dict["ADD_PARKLANES2"]] = new_attrs["parklanes2"]
+                    row[cf_dict["CHANGE_PARKRES1"]] = new_attrs["parkres1"]
+                    row[cf_dict["CHANGE_PARKRES2"]] = new_attrs["parkres2"]
+                    row[cf_dict["ADD_BUSLANES1"]] = new_attrs["buslanes1"]
+                    row[cf_dict["ADD_BUSLANES2"]] = new_attrs["buslanes2"]
+                    row[cf_dict["ADD_SIGIC"]] = new_attrs["sigic"]
+                    row[cf_dict["ADD_CLTL"]] = new_attrs["cltl"]
+                    row[cf_dict["ADD_RRGRADECROSS"]] = new_attrs["rrgradex"]
+                    row[cf_dict["NEW_TOLLDOLLARS"]] = new_attrs["tolldollars"]
+                    row[cf_dict["NEW_MODES"]] = new_attrs["modes"]
+                    row[cf_dict["NEW_VCLEARANCE"]] = new_attrs["vclearance"]
+                    row[cf_dict["PROCESS_NOTES"]] = "Updated from import successfully."
+
+                    ucursor.updateRow(row)
+
+                elif (tipid, abb) in delete_rows:
+                    ucursor.deleteRow()
+        
+        # insert rows
+        # have to calculate completion year
+        hwyproj_df = self.hwyproj_df
+        years_dict = hwyproj_df.set_index("TIPID")["COMPLETION_YEAR"].to_dict()
+
+        with arcpy.da.InsertCursor(coding_table, coding_fields) as icursor:
+
+            for new_attrs in insert_rows:
+
+                row = [None] * len(coding_fields)
+
+                tipid = new_attrs["tipid"]
+
+                row[cf_dict["TIPID"]] = tipid
+                row[cf_dict["ABB"]] = new_attrs["abb"]
+                row[cf_dict["ACTION_CODE"]] = new_attrs["action"]
+                row[cf_dict["NEW_DIRECTIONS"]] = new_attrs["directions"]
+                row[cf_dict["NEW_TYPE1"]] = new_attrs["type1"]
+                row[cf_dict["NEW_TYPE2"]] = new_attrs["type2"]
+                row[cf_dict["NEW_AMPM1"]] = new_attrs["ampm1"]
+                row[cf_dict["NEW_AMPM2"]] = new_attrs["ampm2"]
+                row[cf_dict["NEW_POSTEDSPEED1"]] = new_attrs["speed1"]
+                row[cf_dict["NEW_POSTEDSPEED2"]] = new_attrs["speed2"]
+                row[cf_dict["NEW_THRULANES1"]] = new_attrs["lanes1"]
+                row[cf_dict["NEW_THRULANES2"]] = new_attrs["lanes2"]
+                row[cf_dict["NEW_THRULANEWIDTH1"]] = new_attrs["feet1"]
+                row[cf_dict["NEW_THRULANEWIDTH2"]] = new_attrs["feet2"]
+                row[cf_dict["ADD_PARKLANES1"]] = new_attrs["parklanes1"]
+                row[cf_dict["ADD_PARKLANES2"]] = new_attrs["parklanes2"]
+                row[cf_dict["CHANGE_PARKRES1"]] = new_attrs["parkres1"]
+                row[cf_dict["CHANGE_PARKRES2"]] = new_attrs["parkres2"]
+                row[cf_dict["ADD_BUSLANES1"]] = new_attrs["buslanes1"]
+                row[cf_dict["ADD_BUSLANES2"]] = new_attrs["buslanes2"]
+                row[cf_dict["ADD_SIGIC"]] = new_attrs["sigic"]
+                row[cf_dict["ADD_CLTL"]] = new_attrs["cltl"]
+                row[cf_dict["ADD_RRGRADECROSS"]] = new_attrs["rrgradex"]
+                row[cf_dict["NEW_TOLLDOLLARS"]] = new_attrs["tolldollars"]
+                row[cf_dict["NEW_MODES"]] = new_attrs["modes"]
+                row[cf_dict["NEW_VCLEARANCE"]] = new_attrs["vclearance"]
+                
+                if tipid in years_dict:
+                    row[cf_dict["COMPLETION_YEAR"]] = years_dict[tipid]
+                else:
+                    row[cf_dict["COMPLETION_YEAR"]] = 0
+
+                row[cf_dict["PROCESS_NOTES"]] = "Inserted from import successfully"
+
+                icursor.insertRow(row)
+
+        print("Highway project coding imported.\n")
+
     # method that checks the project coding table
     def check_hwyproj_coding_table(self):
 
@@ -554,7 +744,7 @@ class HighwayNetwork:
                             domain_violation += 1
 
                 if domain_violation > 0:
-                    link_fail += 1
+                    row_fail += 1
                     row[use_pos] = 0
                     row[notes_pos] = "Error: Domain violation"
                     ucursor.updateRow(row)
@@ -754,31 +944,6 @@ class HighwayNetwork:
             message = f"{len(year_edits_dict)} links exist where multiple actions were applied in a single year. "
             message += "Check output coding table.\n"
             error_file.write(message)
-        
-        # find dead skeleton links
-        self.get_hwy_dfs()
-        hwylink_df = self.hwylink_df
-        coding_df = self.coding_df
-
-        skeleton_links_list = hwylink_df[hwylink_df.BASELINK == "0"].ABB.to_list()
-        add_links_set = set(coding_df[coding_df.ACTION_CODE == "4"].ABB.to_list())
-
-        dead_links_list = [link for link in skeleton_links_list if link not in add_links_set]
-
-        hwylink_fc = os.path.join(self.current_gdb, "hwynet/hwynet_arc")
-        fields = ["ABB", "DESCRIPTION"]
-
-        with arcpy.da.UpdateCursor(hwylink_fc, fields) as ucursor:
-            for row in ucursor:
-
-                if row[0] in dead_links_list:
-                    row[1] = "Dead skeleton link is never added."
-                    ucursor.updateRow(row)
-
-        if len(dead_links_list) > 0:
-            message = f"{len(dead_links_list)} skeleton links exist which are never added. "
-            message += "Check output link fc.\n"
-            error_file.write(message)
 
         error_file.close()
 
@@ -865,6 +1030,198 @@ class HighwayNetwork:
             self.copy_hwy_links()
 
         print("All years built.\n")
+
+    # method that cleans up the CURRENT output gdb
+    def finalize_hwy_data(self):
+
+        print("Finalizing highway data...")
+
+        current_gdb = self.current_gdb
+
+        hwylink_fc = os.path.join(current_gdb, "hwynet/hwynet_arc")
+        hwynode_fc = os.path.join(current_gdb, "hwynet/hwynet_node")
+        coding_table = os.path.join(current_gdb, "hwyproj_coding")
+        hwyproj_fc = os.path.join(current_gdb, "hwynet/hwyproj")
+
+        mhn_out_folder = self.mhn_out_folder
+
+        remaining_nodes = set()
+        abb_to_new_abb = {}
+        fields = ["BASELINK", "NEW_BASELINK", "ANODE", "BNODE", "ABB"]
+
+        # finalize links
+        with arcpy.da.UpdateCursor(hwylink_fc, fields) as ucursor:
+            for row in ucursor:
+                
+                # baselink = 1 -> 0 - delete
+                if row[0] == "1" and row[1] == "0":
+                    abb = row[4]
+                    ucursor.deleteRow()
+
+                # else - update baselink to new baselink 
+                else:
+                    row[0] = row[1] # baselink = new baselink 
+                    
+                    abb = row[4]
+                    new_abb = f"{row[2]}-{row[3]}-{row[0]}"
+                    
+                    abb_to_new_abb[abb] = new_abb
+                    remaining_nodes.update([row[2], row[3]])
+                    
+                    row[4] = new_abb
+                    ucursor.updateRow(row)
+
+        # finalize nodes
+        with arcpy.da.UpdateCursor(hwynode_fc, ["NODE"]) as ucursor:
+            for row in ucursor:
+
+                # delete nodes which are not connected to links
+                if row[0] not in remaining_nodes:
+                    ucursor.deleteRow()
+
+        # finalize project coding table
+        fields = ["USE", "ABB"]
+        with arcpy.da.UpdateCursor(coding_table, fields) as ucursor:
+            for row in ucursor:
+
+                # drop use = 0 
+                if row[0] == 0:
+                    ucursor.deleteRow()
+
+                # else, update its abb
+                else:
+                    abb = row[1]
+                    row[1] = abb_to_new_abb[abb]
+                    ucursor.updateRow(row)
+
+        # make an fc of the remaining projects
+        arcpy.management.CreateFeatureclass("memory", "coding_remaining", "POLYLINE", spatial_reference = 26771)
+        coding_remaining = os.path.join("memory", "coding_remaining")
+        arcpy.management.AddFields(coding_remaining, [["TIPID", "TEXT"], ["ABB", "TEXT"]])
+
+        with arcpy.da.SearchCursor(coding_table, ["TIPID", "ABB"]) as scursor:
+            with arcpy.da.InsertCursor(coding_remaining, ["TIPID", "ABB"]) as icursor:
+
+                for row in scursor:
+                    icursor.insertRow(row)
+
+        geom_fields = ["SHAPE@", "ABB"]
+        with arcpy.da.UpdateCursor(coding_remaining, geom_fields) as ucursor:
+            for u_row in ucursor:
+                
+                abb = u_row[1]
+                
+                geom = None
+                where_clause = f"ABB = '{abb}'"
+
+                with arcpy.da.SearchCursor(hwylink_fc, geom_fields, where_clause) as scursor:
+                    for s_row in scursor:
+
+                        geom = s_row[0]
+                            
+                ucursor.updateRow([geom, abb])
+
+        # dissolve projects and get geometries
+        hwyproj_dissolve = os.path.join("memory", "hwyproj_dissolve")
+        arcpy.management.Dissolve(coding_remaining, hwyproj_dissolve, ["TIPID"])
+
+        geom_dict = {}
+        
+        with arcpy.da.SearchCursor(hwyproj_dissolve, ["TIPID", "SHAPE@"]) as scursor:
+            for row in scursor:
+                    
+                tipid = row[0]
+                geom = row[1]
+
+                multi_array = arcpy.Array()
+                for part in geom:
+                    
+                    part_array = arcpy.Array([point for point in part])
+                    multi_array.append(part_array)
+
+                polyline = arcpy.Polyline(multi_array, spatial_reference = 26771)
+                geom_dict[tipid] = polyline
+
+        # save projects which don't have any links associated with them now
+        removed_projects = os.path.join(
+            mhn_out_folder, "removed_projects.txt")
+        
+        removed_file = open(removed_projects, "a") # open file, don't forget to close it!
+        removed_file.write("TIPID, COMPLETION YEAR, MCP_ID, RSP_ID, RCP_ID, NOTES")
+        
+        # in original hwyproj fc, drop if deleted + save
+        # else update its geometry
+
+        table_fields = ["TIPID", "COMPLETION_YEAR", "MCP_ID", "RSP_ID", "RCP_ID", "NOTES"]
+        all_fields = table_fields + ["SHAPE@"]
+
+        with arcpy.da.UpdateCursor(hwyproj_fc, all_fields) as ucursor:
+            for row in ucursor:
+
+                tipid = row[0]
+
+                if tipid in geom_dict:
+                    row[6] = geom_dict[tipid]
+                    ucursor.updateRow(row)
+
+                else:
+                    removed_file.write(str(row[0:6]))
+                    ucursor.deleteRow()
+
+        removed_file.close()
+
+        arcpy.management.Delete(coding_remaining)
+        arcpy.management.Delete(hwyproj_dissolve)
+
+        arcpy.management.DeleteField(hwynode_fc, ["DESCRIPTION"])
+        arcpy.management.DeleteField(hwylink_fc, ["NEW_BASELINK", "DESCRIPTION", "PROJECT"])
+        arcpy.management.DeleteField(hwyproj_fc, ["DESCRIPTION"])
+        arcpy.management.DeleteField(coding_table, ["COMPLETION_YEAR", "PROCESS_NOTES", "USE"])
+
+        print("Highway data finalized.\n")
+
+    # method that adds the relationship classes back
+    def add_rcs(self):
+
+        print("Adding back relationship classes...")
+
+        arcpy.env.workspace = self.current_gdb
+
+        # add rel_hwyproj_to_coding
+        arcpy.management.CreateRelationshipClass(
+            "hwyproj", "hwyproj_coding", "rel_hwyproj_to_coding",
+            "COMPOSITE", "hwyproj_coding", "hwyproj", "FORWARD", "ONE_TO_MANY", 
+            "NONE", "TIPID", "TIPID")
+        
+        # add rel_arcs_to_hwyproj_coding
+        arcpy.management.CreateRelationshipClass(
+            "hwynet_arc", "hwyproj_coding", "rel_arcs_to_hwyproj_coding",
+            "SIMPLE", "hwyproj_coding", "hwynet_arc", "NONE", "ONE_TO_MANY", 
+            "NONE", "ABB", "ABB")
+        
+        # buses 
+        xes = ["base", "current", "future"]
+        for x in xes:
+
+            # add rel_bus_x_to_itin
+            arcpy.management.CreateRelationshipClass(
+                f"bus_{x}", f"bus_{x}_itin", f"rel_bus_{x}_to_itin",
+                "COMPOSITE", f"bus_{x}_itin", f"bus_{x}", "FORWARD", "ONE_TO_MANY", 
+                "NONE", "TRANSIT_LINE", "TRANSIT_LINE")
+            
+            # add rel_arcs_to_bus_x_itin
+            arcpy.management.CreateRelationshipClass(
+                "hwynet_arc", f"bus_{x}_itin", f"rel_arcs_to_bus_{x}_itin",
+                "SIMPLE", f"bus_{x}_itin", "hwynet_arc", "NONE", "ONE_TO_MANY",
+                "NONE", "ABB", "ABB")
+            
+        # add rel_nodes_to_parknride
+        arcpy.management.CreateRelationshipClass(
+            "hwynet_node", "parknride", "rel_nodes_to_parknride",
+            "SIMPLE", "parknride", "hwynet_node", "NONE", "ONE_TO_MANY",
+            "NONE", "NODE", "NODE")
+        
+        print("Relationship classes added.")
 
     # HELPER METHODS ------------------------------------------------------------------------------
 
@@ -1159,6 +1516,7 @@ class HighwayNetwork:
         nvclearance_pos = cf_dict["NEW_VCLEARANCE"]
         notes_pos = cf_dict["PROCESS_NOTES"]
 
+        # apply all action = 1
         if len(action_1_dict) > 0:
 
             for action in action_1_dict:
@@ -1295,6 +1653,7 @@ class HighwayNetwork:
                         row[0] = f"Modified in {current_year}"
                         ucursor.updateRow(row)
 
+        # apply all action = 3
         if len(action_3_dict) > 0:
             
             for action in action_3_dict:
@@ -1326,6 +1685,7 @@ class HighwayNetwork:
 
                         ucursor.updateRow(row)
 
+        # apply all action = 4
         if len(action_4_dict) > 0:
 
             for action in action_4_dict:
