@@ -1147,7 +1147,7 @@ class HighwayNetwork:
             mhn_out_folder, "removed_projects.txt")
         
         removed_file = open(removed_projects, "a") # open file, don't forget to close it!
-        removed_file.write("TIPID, COMPLETION YEAR, MCP_ID, RSP_ID, RCP_ID, NOTES")
+        removed_file.write("TIPID, COMPLETION YEAR, MCP_ID, RSP_ID, RCP_ID, NOTES\n")
         
         # in original hwyproj fc, drop if deleted + save
         # else update its geometry
@@ -1165,7 +1165,7 @@ class HighwayNetwork:
                     ucursor.updateRow(row)
 
                 else:
-                    removed_file.write(str(row[0:6]))
+                    removed_file.write(str(row[0:6]) + "\n")
                     ucursor.deleteRow()
 
         removed_file.close()
