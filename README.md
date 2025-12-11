@@ -3,7 +3,7 @@ Programs for processing the Master Highway Network (MHN) for freight/travel mode
 
 At a conceptual level, the way MHN fits together with the Master Freight Network (MFN) and Master Rail Network (MRN) for processing is described by the (greatly simplified) diagram:
 
-![A diagram showing the highway sub-process in the repository.](docs/images/mfhrn_concept.png)
+![A diagram showing the concept of this repository.](docs/images/mfhrn_concept.png)
 
 The boxes represent input while the circles represent output. As you can see from the diagram, the highway and bus output from the MHN are a crucial first step in freight/travel modeling. 
 

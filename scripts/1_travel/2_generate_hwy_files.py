@@ -1,5 +1,5 @@
-# 2_generate_hwy_files.py
-# a translation of generate_highway_files.py
+## 2_generate_hwy_files.py
+## a translation of generate_highway_files.py
 ## Author: npeterson
 ## Translated + Updated by ccai (2025)
 
