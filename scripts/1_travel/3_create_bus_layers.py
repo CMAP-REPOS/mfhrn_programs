@@ -37,7 +37,6 @@ class BusNetwork:
 
         # TODO: replace with input
         self.scenario_dict = {
-            # 1: 2019,
             3: 2030
         }
 
@@ -216,6 +215,11 @@ class BusNetwork:
 
         mhn_all_gdb = os.path.join(self.mhn_out_folder, "MHN_all.gdb")
 
+        if os.path.exists(self.error_file_2):
+            os.remove(self.error_file_2)
+
+        error_file= open(self.error_file_2, "a")
+
         for scen in scenario_dict:
 
             year = scenario_dict[scen]
@@ -239,8 +243,6 @@ class BusNetwork:
 
             scen_nodes = set(node_dict.keys())
 
-            print(len(scen_nodes))
-
             # for each tod
             for tod in [1, 2, 3, 4]:
 
@@ -251,10 +253,45 @@ class BusNetwork:
                 # find highway links
                 G = self.create_tod_hwy_networks(scen, tod)
                 scen_nodes = scen_nodes & set(G.nodes)
-                print(len(scen_nodes))
 
                 # find bus networks
                 reroute_dict = self.create_tod_bus_runs(scen, tod)
+                self.create_tod_bus_itins(scen, tod, reroute_dict, G, error_file)
+
+            # find scenario park n ride nodes
+            cr_gdb = os.path.join(bn_out_folder, f"collapsed_routes.gdb")
+
+            input_nodes = os.path.join(cr_gdb, "parknride")
+            arcpy.management.MakeFeatureLayer(input_nodes, "input_nodes_layer", f"SCENARIO LIKE '%{scen}%'")
+            output_nodes = os.path.join(scen_gdb, "scen_parknride")
+            arcpy.management.CopyFeatures("input_nodes_layer", output_nodes)
+
+            arcpy.management.Delete("input_nodes_layer")
+
+            error_file.write("\n")
+            
+            error_file.write(f"Errors in scenario {scen} park and ride nodes:\n")
+            error_file.write(f"------------------------------------\n")
+
+            with arcpy.da.UpdateCursor(output_nodes, ["NODE", "FACILITY", "SHAPE@"]) as ucursor:
+                for row in ucursor:
+
+                    facility = row[1]
+
+                    if row[0] not in scen_nodes:
+                        
+                        replace_node = self.find_nearest_node(row[0], scen_nodes.copy(), zone = True)
+                        if replace_node == None:
+
+                            error_file.write(f"Node for {facility} could not be found/replaced. Removing facility.")
+                            ucursor.deleteRow()
+
+                        else:
+
+                            replace_geom = node_dict[replace_node]["GEOM"]
+                            ucursor.updateRow([replace_node, facility, replace_geom])
+
+        error_file.close()
 
     # HELPER METHODS ------------------------------------------------------------------------------
 
@@ -330,6 +367,8 @@ class BusNetwork:
         print("Link dictionary built.\n")
 
         return link_dict
+
+
 
     # helper method to copy fcs to collapse routes
     def copy_bus_fcs(self, fc_name):
@@ -896,7 +935,293 @@ class BusNetwork:
         else:
             return 0
         
+    # helper method which makes tod bus itineraries
+    def create_tod_bus_itins(self, scen, tod, reroute_dict, G, 
+                             error_file):
+
+        bn_out_folder = self.bn_out_folder
+
+        cr_gdb = os.path.join(bn_out_folder, f"collapsed_routes.gdb")
+        scen_gdb = os.path.join(bn_out_folder, f"SCENARIO_{scen}.gdb")
+
+        which_gtfs = "base"
+        if scen > 1:
+            which_gtfs = "current"
+
+        # get itins as dicts
+        tod_fd = os.path.join(cr_gdb, f"TOD_{tod}")
+        itin_gtfs_fc = os.path.join(tod_fd, f"itin_{which_gtfs}_{tod}")
+        itin_future_fc = os.path.join(cr_gdb, f"itin_future_0")
+
+        error_file.write("\n")
+
+        error_file.write(f"Errors in scenario {scen} TOD {tod} transit lines:\n")
+        error_file.write(f"------------------------------------\n")
+
+        exclude_fields = ["OBJECTID", "Shape", "Shape_Length"]
+        fields = [f.name for f in arcpy.ListFields(itin_gtfs_fc) if (f.name not in exclude_fields)]
+
+        itin_gtfs_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(itin_gtfs_fc, fields)],
+            columns = fields
+        ).sort_values(["TRANSIT_LINE", "ITIN_ORDER"])
+
+        itin_gtfs_dict = {k: v.to_dict(orient='records') for k, v in itin_gtfs_df.groupby("TRANSIT_LINE")}
+
+        itin_future_df = pd.DataFrame(
+            data = [row for row in arcpy.da.SearchCursor(itin_future_fc, fields)],
+            columns = fields
+        ).sort_values(["TRANSIT_LINE", "ITIN_ORDER"])
+
+        itin_future_dict = {k: v.to_dict(orient='records') for k, v in itin_future_df.groupby("TRANSIT_LINE")}
+
+        # all the lines for the scenario
+        tod_fd = os.path.join(scen_gdb, f"TOD_{tod}")
+        rep_scen_fc = os.path.join(tod_fd, f"scen_line_{tod}")
+
+        transit_lines = {row[0]: row[1] for row in arcpy.da.SearchCursor(rep_scen_fc, ["TRANSIT_LINE", "MODERTE"])}
+
+        # create itin 
+        arcpy.management.CreateFeatureclass(tod_fd, f"scen_itin_{tod}", "POLYLINE", itin_gtfs_fc)
+        rep_itin_fc = os.path.join(tod_fd, f"scen_itin_{tod}")
+
+        fields = ["SHAPE@", "TRANSIT_LINE", "ITIN_ORDER", 
+                  "ITIN_A", "ITIN_B", "ABB", 
+                  "DWELL_CODE", "LINE_SERV_TIME", "TTF", "NOTES"]
+        
+        with arcpy.da.InsertCursor(rep_itin_fc, fields) as icursor:
+
+            for transit_line in transit_lines:
+
+                moderte = transit_lines[transit_line]
+                line_itin = None
+
+                if transit_line in itin_gtfs_dict:
+                    line_itin = itin_gtfs_dict[transit_line]
+
+                elif transit_line in itin_future_dict:
+                    line_itin = itin_future_dict[transit_line]
+
+                final_itin = self.make_final_line_itin(transit_line, line_itin,
+                                                       moderte, reroute_dict, itin_future_dict, 
+                                                       G, error_file)
+                
+                for record in final_itin:
+
+                    itin_order = record["ITIN_ORDER"]
+                    itin_a = record["ITIN_A"]
+                    itin_b = record["ITIN_B"]
+                    abb = record["ABB"]
+
+                    dwc = record["DWELL_CODE"]
+                    lst = record["LINE_SERV_TIME"]
+                    ttf = record["TTF"]
+                    notes = record["NOTES"]
+
+                    geom = self.link_dict[(itin_a, itin_b)]["GEOM"]
+
+                    icursor.insertRow(
+                        [geom, transit_line, itin_order, 
+                         itin_a, itin_b, abb, 
+                         dwc, lst, ttf, notes]
+                    )
+
+    # helper method that makes final line itin
+    def make_final_line_itin(self, transit_line, line_itin, moderte, 
+                             reroute_dict, itin_future_dict, G, error_file):
+
+        # first- reroute
+        anodes = [record["ITIN_A"] for record in line_itin]
+        bnodes = [record["ITIN_B"] for record in line_itin]
+
+        # attempt to reroute
+        if moderte in reroute_dict:
+
+            reroute = 0
+            reroute_lines = reroute_dict[moderte]
+
+            for reroute_line in reroute_lines:
+
+                reroute_itin = itin_future_dict[reroute_line]
+                start_node = reroute_itin[0]["ITIN_A"]
+                end_node = reroute_itin[-1]["ITIN_B"]
+
+                if start_node in anodes and end_node in bnodes:
+
+                    start_index = anodes.index(start_node)
+                    end_index = bnodes.index(end_node)
+
+                    if start_index <= end_index:
+
+                        first_part = line_itin[: start_index]
+                        reroute_part = reroute_itin
+                        last_part = line_itin[end_index + 1:]
+
+                        line_itin = first_part + reroute_part + last_part
+                        reroute = 1
+
+            if reroute == 0:
+                error_file.write(f"WARNING: Could not reroute {transit_line} ({moderte})\n")
+
+        # make sure first + last node are secured 
+        available_nodes = set(G.nodes())
+        first_node = anodes[0]
+
+        if first_node not in available_nodes:
+
+            replace_node = self.find_nearest_node(first_node, available_nodes)
+            if replace_node == None:
+                error_file.write(f"ERROR: First node of {transit_line} could not be found/replaced. Removing line.\n")
+                return []
+            
+            else:
+                line_itin[0]["ITIN_A"] = replace_node
+
+        last_node = bnodes[-1]
+        if last_node not in available_nodes:
+
+            replace_node = self.find_nearest_node(last_node, available_nodes)
+
+            if replace_node == None:
+                error_file.write(f"ERROR: Last node of {transit_line} could not be found/replaced. Removing line.\n")
+                return []
+            
+            else:
+                line_itin[-1]["ITIN_B"] = replace_node
+
+        # make final itinerary
+        final_itin = []
+
+        i = 0 # counter that loops through original itin
+        itin_order = 0
+
+        while i < len(line_itin):
+
+            record = line_itin[i]
+            itin_a = record["ITIN_A"]
+            itin_b = record["ITIN_B"]
+
+            # segment is in network
+            if G.has_edge(itin_a, itin_b):
+                itin_order += 1
+                record["ITIN_ORDER"] = itin_order
+                final_itin.append(record)
+
+                i+= 1
+            # segment is not in network
+            else:
+
+                i += 1
+                dwc = record["DWELL_CODE"]
+                ttf = record["TTF"]
+
+                # get consecutive missing segments
+                while i < len(line_itin):
+
+                    recordx = line_itin[i]
+                    itin_ax = recordx["ITIN_A"]
+                    itin_bx = recordx["ITIN_B"]
+                    dwcx = recordx["DWELL_CODE"]
+                    ttfx = recordx["TTF"]
+
+                    if G.has_edge(itin_ax, itin_bx):
+                        break
+
+                    else:
+                        
+                        itin_b = itin_bx
+                        dwc = dwcx
+                        ttf = ttfx
+                        i += 1
+
+                # is there a path
+                if nx.has_path(G, itin_a, itin_b):
+                    
+                    # find shortest path
+                    path = nx.shortest_path(G, itin_a, itin_b)
+
+                    for j in range(0, len(path) - 1):
+
+                        record = {}
+
+                        itin_order += 1
+                        record["ITIN_ORDER"] = itin_order
+                        record["ITIN_A"] = path[j]
+                        record["ITIN_B"] = path[j+1]
+                        record["ABB"] = self.link_dict[(path[j], path[j+1])]["ABB"]
+
+                        # assume stop
+                        dwcj = 0
+
+                        # if mode is E or Q - change to non-stop
+                        if transit_line[0] in ["e", "q"]:
+                            dwcj = 1
+
+                        # if last in segment - use original dwc
+                        if j == len(path) - 2:
+                            dwcj = dwc
+
+                        record["DWELL_CODE"] = dwcj
+
+                        miles = self.link_dict[(path[j], path[j+1])]["MILES"]
+                        record["LINE_SERV_TIME"] = max(miles * (60/ self.default_speed), 0.1)
+
+                        record["TTF"] = ttf
+                        record["NOTES"] = "Shortest Path"
+
+                        final_itin.append(record)
+
+                else:
+                    error_file.write(f"ERROR: Shortest path could not be calculated for {transit_line}. Removing line.\n")
+                    return []
+        
+        if len(final_itin) == 0:
+            error_file.write(f"ERROR: Zero segments in {transit_line}. Removing line.")
+
+        return final_itin
     
+    # find nearest node
+    def find_nearest_node(self, orig_node, available_nodes, zone = False):
+
+        node_dict = self.node_dict
+
+        # this node straight up does not exist
+        if orig_node not in node_dict:
+            return None
+        
+        orig_zone = node_dict[orig_node]["ZONE"]
+    
+        # park n ride - requires it to be the same zone
+        if zone == True:
+
+            for node in available_nodes.copy():
+                if node_dict[node]["ZONE"] != orig_zone:
+                    available_nodes.remove(node)
+
+        if len(available_nodes) == 0:
+            return None
+        
+        orig_node_loc = node_dict[orig_node]["GEOM"]
+
+        available_nodes = list(available_nodes)
+
+        nearest_node = available_nodes[0]
+        comp_node_loc = node_dict[nearest_node]["GEOM"]
+
+        nearest_dist = orig_node_loc.distanceTo(comp_node_loc)
+
+        for node in available_nodes:
+
+            comp_node_loc = node_dict[node]["GEOM"]
+
+            dist = orig_node_loc.distanceTo(comp_node_loc)
+
+            if dist < nearest_dist:
+
+                nearest_dist = dist
+                nearest_node = node
+
+        return nearest_node
 
 start_time = time.time()
 
