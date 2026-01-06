@@ -66,6 +66,10 @@ arcpy.management.AddFields("meso_buffer", [["USE", "SHORT"]])
 arcpy.management.CalculateField("meso_buffer", "USE", "1")
 
 out_folder = os.path.join(mfhrn_path, "output")
+
+if os.path.isdir(out_folder) != True:
+    os.mkdir(out_folder)
+
 mfn_out_folder = os.path.join(out_folder, "2_freight")
 
 if os.path.isdir(mfn_out_folder) == True:
