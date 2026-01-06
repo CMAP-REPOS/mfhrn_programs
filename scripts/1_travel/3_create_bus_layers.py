@@ -35,10 +35,11 @@ class BusNetwork:
         self.bus_base = 2019
         self.bus_current = 2024
 
-        # TODO: replace with input
-        self.scenario_dict = {
-            3: 2030
-        }
+        years_csv_path = os.path.join(in_folder, "input_years.csv")
+        scenario_df = pd.read_csv(years_csv_path)
+        scenario_df["scenario"] = scenario_df["scenario"]//100
+        self.scenario_dict = scenario_df.set_index("scenario")["year"].to_dict()
+        print(self.scenario_dict)
 
         self.bn_out_folder = os.path.join(self.mhn_out_folder, "bus_network")
 
@@ -1226,8 +1227,8 @@ class BusNetwork:
 start_time = time.time()
 
 BN = BusNetwork()
-# BN.create_bn_folder()
-# BN.collapse_bus_routes()
+BN.create_bn_folder()
+BN.collapse_bus_routes()
 BN.create_bus_layers()
 
 end_time = time.time()
