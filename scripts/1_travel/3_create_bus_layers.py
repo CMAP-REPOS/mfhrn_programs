@@ -1,6 +1,6 @@
 ## 3_create_bus_layers.py
 ## a translation of generate_transit_files.py (the first half)
-# ## Author: npeterson
+## Author: npeterson
 ## Translated + Updated by ccai (2025)
 
 import os
@@ -39,7 +39,6 @@ class BusNetwork:
         scenario_df = pd.read_csv(years_csv_path)
         scenario_df["scenario"] = scenario_df["scenario"]//100
         self.scenario_dict = scenario_df.set_index("scenario")["year"].to_dict()
-        print(self.scenario_dict)
 
         self.bn_out_folder = os.path.join(self.mhn_out_folder, "bus_network")
 
@@ -593,7 +592,7 @@ class BusNetwork:
             ["TRANSIT_LINE", "TEXT"], ["ITIN_ORDER", "SHORT"],
             ["ITIN_A", "LONG"], ["ITIN_B", "LONG"],
             ["ABB", "TEXT"], ["DWELL_CODE", "TEXT"], 
-            ["LINE_SERV_TIME", "FLOAT"], ["TTF", "FLOAT"],
+            ["LINE_SERV_TIME", "FLOAT"], ["TTF", "TEXT"],
             ["NOTES", "TEXT"]
         ]
 
@@ -658,7 +657,7 @@ class BusNetwork:
                         itin_order+= 1
                         row = [None, tr_line, itin_order, itin_b, next_a,
                                # abb, dwc, lst, ttf, notes
-                               None, 1, 0, 1, "Itin Gap"] 
+                               None, "1", 0, "1", "Itin Gap"] 
                         
                         error_file.write(f"{tr_line} - itinerary gap between {itin_b}, {next_a}\n")
                         icursor.insertRow(row)
