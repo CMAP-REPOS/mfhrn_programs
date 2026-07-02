@@ -7,3 +7,7 @@ output/
 *__pycache__*
 
 *draft*
+
+# Ignore the user generated config for testing 
+# (because will vary) person to person
+tests/src/_testing_config.py
