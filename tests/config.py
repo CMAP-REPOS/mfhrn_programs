@@ -145,7 +145,11 @@ def write_test_config_file(
     Writes config options for testing to a python file called
     '_testing_config.py' to be used by tests to reduce number of env problems
     """
-    # docstring for config file (so good documentation)
+    # NOTE: AR: This function is incredibly goofily formatted
+    # because of the docstrings and writing to Python file code
+    # but it works!
+
+    # docstring for config file
     _config_docstring = """'''
 This module contains user set config information for testing.
 Specifically, it provides the path for:
