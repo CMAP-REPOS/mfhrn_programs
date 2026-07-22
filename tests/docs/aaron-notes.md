@@ -12,9 +12,30 @@
 ## TODOs:
 - Add docstrings for utility classes/functions/methods
 - Swap hardcoded paths
+- Remove ArcPy (particularly for 3rd tool)
+    in favor of Pandas
 
 ## General Notes
 - Tools and utilities lack documentation
+
+## Tim's Equivalence Testing Notes:
+If you navigate to "M:\proj1\tko\MHN\mfhrn_equivalence_test," you'll find several folders. Each folder represents a different MHN processing script. The containing data within the "before" and "after" gdbs illustrate how the given tool alters the MHN geodatabase.
+0_incorporate_edits (Updates hwynet_arc and hwynet_node)
+before_state0.gdb -- contains unprocessed network changes, I made several random roadway links at the western edge of the region, they look like a little clump of hair
+after_state1.gdb 
+1_import_hwyproj_coding (Updates hwyproj and hwyproj_coding)
+(Need to reference the test xlsx, also within this folder. Updates the new roadways from the previous step with project coding, and a couple other random things.)
+before_state1.gdb
+after_state2.gdb
+2_update_hwyproj_years (Updates hwyproj)
+(Needs all three csv's: year, required, nocode. (these names are confusing-- you will also hear them referenced as the following: year\=\=conformed, required\=\=exempt, nocode==uncodeable)
+(You also need a copy of the MRN to run this script. Please copy-paste the following gdb somewhere and use the copy, so we can keep the original safe: "M:\adb\MRN\dev\mrn.gdb")
+before_state2.gdb
+after_state3.gdb
+3_output
+highway (this folder will contain the testable changes)
+linkshape
+transit
 
 ## Per Tool Notes
 Notes for each tool in MFHRN
@@ -38,3 +59,4 @@ Notes for each tool in MFHRN
 
 - input_years.csv: 
     Replace with flag like `--scen-list`: e.g., '--scen-list 2019;2026;2030;2040'
+
