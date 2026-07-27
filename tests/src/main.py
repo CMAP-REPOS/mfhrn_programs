@@ -14,14 +14,19 @@ Notes: N/A
 """
 
 # SECTION: External dependencies
+import logging
 
 
 # SECTION: Internal dependencies
+import generate_hwy_files
+import export_future_hwys
+from export_future_hwys import test_run_full_script_no_flags
+import import_hwyproj_coding
 
 
 # AR: This function defintion goes here just so that the import of config
 # can be at the top
-def load_testing_config():
+def test_load_config():
     """
     Helper function: tries to import the testing config file,
     and if it is not found, tells user what to do.
@@ -49,8 +54,28 @@ def load_testing_config():
         raise ModuleNotFoundError(error_msg)
 
 
-load_testing_config()
-
 # SECTION: Constants
 
+
 # SECTION: Functions
+def main():
+    print("Running all tests")
+
+    logging.info("Importing testing config file")
+    test_load_config()
+
+    logging.info("Running `export_future_hwys` tool")
+    export_future_hwys.main()
+
+    logging.info("Running `generate_hwy_files` tool")
+    generate_hwy_files.main()
+
+    logging.info("Running `import_hwyproj_coding` tool")
+    import_hwyproj_coding.main()
+
+    logging.info("Running `create_bus_layers` tool")
+
+
+# SECTION: Main
+if __name__ == "__main__":
+    main()
