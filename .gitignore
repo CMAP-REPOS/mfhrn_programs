@@ -15,3 +15,6 @@ tests/src/_testing_config.py
 # .vscode from debugging is annoying if on github
 .vscode/
 .vs_code/
+
+# input test files are too large to be pushed to github :(
+tests/inputs/

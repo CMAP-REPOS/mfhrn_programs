@@ -591,19 +591,25 @@ class HighwayNetwork:
                 "Row(s) detected where ANODE and BNODE don't correspond to a valid link. Crashing program."
             )
 
+        # NOTE: AR: The below code that checks whether ABB and TIPID are
+        # unique had to be changed because it would fail when the two links
+        # are different TODs. In the future, a check should be added
+        # to make sure that all TODs are covered (1-8 inclusive)
+
         # check where tipid-abb is not unique
         import_df["abb"] = import_df.apply(
             lambda x: abb_dict[(x["anode"], x["bnode"])]["ABB"], axis=1
         )
         import_records = import_df.to_dict("records")
 
-        tipid_abb_series = import_df.groupby(["tipid", "abb"]).size()
-        duplicate_combos = tipid_abb_series[tipid_abb_series > 1].to_dict()
+        tipid_abb_tod_series = import_df.groupby(["tipid", "abb", "tod"]).size()
+        duplicate_combos = tipid_abb_tod_series[tipid_abb_tod_series > 1].to_dict()
 
         duplicate_records = []
 
         for row in import_records:
-            if (row["tipid"], row["abb"]) in duplicate_combos:
+            key = (row["tipid"], row["abb"], row["tod"])
+            if key in duplicate_combos:
                 duplicate_records.append(row)
 
         if len(duplicate_records) > 0:
@@ -628,8 +634,12 @@ class HighwayNetwork:
             tipid = record["tipid"]
             abb = record["abb"]
 
-            if record["remove"] == "Y":
-                delete_rows.append((tipid, abb))
+            # NOTE: AR: The original check below fails because
+            # Cindy assumed there would be a 'remove' column,
+            # instead, only access dict if remove in cols
+            if "remove" in record:
+                if record["remove"] == "Y":
+                    delete_rows.append((tipid, abb))
             elif (tipid, abb) in existing_list:
                 update_rows[(tipid, abb)] = record
             else:
@@ -703,16 +713,36 @@ class HighwayNetwork:
                 row[cf_dict["NEW_THRULANEWIDTH2"]] = new_attrs["feet2"]
                 row[cf_dict["ADD_PARKLANES1"]] = new_attrs["parklanes1"]
                 row[cf_dict["ADD_PARKLANES2"]] = new_attrs["parklanes2"]
-                row[cf_dict["CHANGE_PARKRES1"]] = new_attrs["parkres1"]
-                row[cf_dict["CHANGE_PARKRES2"]] = new_attrs["parkres2"]
-                row[cf_dict["ADD_BUSLANES1"]] = new_attrs["buslanes1"]
-                row[cf_dict["ADD_BUSLANES2"]] = new_attrs["buslanes2"]
+
+                # NOTE: AR: added simple None guard for 'parkres1' and 'parkres2'
+                row[cf_dict["CHANGE_PARKRES1"]] = (
+                    new_attrs["parkres1"] if "parkres1" in new_attrs else None
+                )
+                row[cf_dict["CHANGE_PARKRES2"]] = (
+                    new_attrs["parkres2"] if "parkres2" in new_attrs else None
+                )
+
+                # NOTE: AR: added simple None guard for 'buslanes1' and 'buslanes2'
+                row[cf_dict["ADD_BUSLANES1"]] = (
+                    new_attrs["buslanes1"] if "buslanes1" in new_attrs else None
+                )
+                row[cf_dict["ADD_BUSLANES2"]] = (
+                    new_attrs["buslanes2"] if "buslanes2" in new_attrs else None
+                )
                 row[cf_dict["ADD_SIGIC"]] = new_attrs["sigic"]
                 row[cf_dict["ADD_CLTL"]] = new_attrs["cltl"]
-                row[cf_dict["ADD_RRGRADECROSS"]] = new_attrs["rrgradex"]
+
+                # NOTE: AR: added None guard for 'rrgradex'
+                row[cf_dict["ADD_RRGRADECROSS"]] = (
+                    new_attrs["rrgradex"] if "rrgradex" in new_attrs else None
+                )
                 row[cf_dict["NEW_TOLLDOLLARS"]] = new_attrs["tolldollars"]
                 row[cf_dict["NEW_MODES"]] = new_attrs["modes"]
-                row[cf_dict["NEW_VCLEARANCE"]] = new_attrs["vclearance"]
+
+                # NOTE: AR: added None guard for 'vclearance'
+                row[cf_dict["NEW_VCLEARANCE"]] = (
+                    new_attrs["vclearance"] if "vclearance" in new_attrs else None
+                )
 
                 if tipid in years_dict:
                     row[cf_dict["COMPLETION_YEAR"]] = years_dict[tipid]
