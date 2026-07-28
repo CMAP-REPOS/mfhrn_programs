@@ -1,10 +1,9 @@
 """
 This script is the entry point for testing the tools
 in the MFHRN repo. If you want to run all tests,
-you can run the following command from the project root
-(replace slashes with backslashes on Windows):
+you can run the following command from the project root:
 
-$ pytest tests\\src\\main.py
+$ python tests\\src\\main.py
 """
 
 """
@@ -22,11 +21,13 @@ import generate_hwy_files
 import export_future_hwys
 from export_future_hwys import test_run_full_script_no_flags
 import import_hwyproj_coding
+import input_preparation.base_mhn as base_mhn
+import create_bus_layers
 
 
 # AR: This function defintion goes here just so that the import of config
 # can be at the top
-def test_load_config():
+def load_testing_config():
     """
     Helper function: tries to import the testing config file,
     and if it is not found, tells user what to do.
@@ -61,19 +62,26 @@ def test_load_config():
 def main():
     print("Running all tests")
 
-    logging.info("Importing testing config file")
-    test_load_config()
+    # NOTE: AR: because Cindy's scripts require files to be in specific
+    # places, I added this function to make it so that you don't
+    # have to copy files by hand into the right place to run the tests (at least the mfhrn only ones)
+    print("Putting base MHN in correct locations")
+    base_mhn.main()
 
-    logging.info("Running `export_future_hwys` tool")
+    print("Importing testing config file")
+    load_testing_config()
+
+    print("Running `export_future_hwys` tool")
     export_future_hwys.main()
 
-    logging.info("Running `generate_hwy_files` tool")
+    print("Running `generate_hwy_files` tool")
     generate_hwy_files.main()
 
-    logging.info("Running `import_hwyproj_coding` tool")
+    print("Running `import_hwyproj_coding` tool")
     import_hwyproj_coding.main()
 
-    logging.info("Running `create_bus_layers` tool")
+    print("Running `create_bus_layers` tool")
+    create_bus_layers.main()
 
 
 # SECTION: Main

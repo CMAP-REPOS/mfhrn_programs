@@ -10,9 +10,12 @@ import subprocess
 
 # SECTION: Internal dependencies
 
+from _testing_config import ARCPY_ENV_PATH
+
 # SECTION: Constants
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 TEST_DIR_PATH = os.path.join(PROJECT_ROOT, "tests")
+ARCPY_PYTHON_PATH = os.path.join(ARCPY_ENV_PATH, "python.exe")
 
 # -- Inputs
 
@@ -44,8 +47,8 @@ TRAVEL_OUTPUTS_DIR_PATH = os.path.join(OUTPUTS_DIR_PATH, "1_travel")
 
 
 def test_run_full_script_no_flags():
-    command = f"python {CREATE_BUS_LAYERS_PY_PATH}"
-    command_result = subprocess.run(command).stdout
+    command = [ARCPY_PYTHON_PATH, CREATE_BUS_LAYERS_PY_PATH]
+    command_result = subprocess.run(command, check=True).stdout
     print(command_result)
 
 

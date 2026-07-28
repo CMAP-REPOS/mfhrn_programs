@@ -10,9 +10,12 @@ import subprocess
 
 # SECTION: Internal dependencies
 
+from _testing_config import ARCPY_ENV_PATH
+
 # SECTION: Constants
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 TEST_DIR_PATH = os.path.join(PROJECT_ROOT, "tests")
+ARCPY_PYTHON_PATH = os.path.join(ARCPY_ENV_PATH, "python.exe")
 
 # -- Inputs
 
@@ -55,8 +58,8 @@ def _check_export_future_hwys_run():
     input_years = input_years["year"].to_list()
 
     mhn_all_gdb_path = os.path.join(TRAVEL_OUTPUTS_DIR_PATH, "MHN_all.gdb")
-    if os.path.isdir(mhn_all_gdb_path):
-        return
+    if not os.path.isdir(mhn_all_gdb_path):
+        raise Exception("You need to run the export_future_hwys_tool first!")
 
     for year in input_years:
         mhn_year_gdb_name = f"MHN_{year}.gdb"
@@ -69,7 +72,6 @@ def _check_export_future_hwys_run():
 
 
 def test_highway_network_initialization():
-    # TODO: Required inputs for TEST
     pass
 
 
@@ -78,13 +80,12 @@ def test_export_future_hwys():
 
 
 def test_read_input_years():
-
     pass
 
 
 def test_run_full_script_no_flags():
-    command = f"python {EXPORT_FUTURE_HWY_PY_PATH}"
-    command_result = subprocess.run(command).stdout
+    command = [ARCPY_PYTHON_PATH, EXPORT_FUTURE_HWY_PY_PATH]
+    command_result = subprocess.run(command, check=True).stdout
     print(command_result)
 
 

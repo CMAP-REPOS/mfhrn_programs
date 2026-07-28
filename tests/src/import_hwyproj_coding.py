@@ -10,10 +10,12 @@ import subprocess
 
 # SECTION: Internal dependencies
 from export_future_hwys import _check_export_future_hwys_run
+from _testing_config import ARCPY_ENV_PATH
 
 # SECTION: Constants
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 TEST_DIR_PATH = os.path.join(PROJECT_ROOT, "tests")
+ARCPY_PYTHON_PATH = os.path.join(ARCPY_ENV_PATH, "python.exe")
 
 # -- Inputs
 
@@ -54,8 +56,8 @@ def test_run_full_script_no_flags():
     """
     Tests a full run of the script of completes succesfully
     """
-    command = f"python {IMPORT_HWYPROJ_CODING_PY_PATH}"
-    command_result = subprocess.run(command).stdout
+    command = [ARCPY_PYTHON_PATH, IMPORT_HWYPROJ_CODING_PY_PATH]
+    command_result = subprocess.run(command, check=True).stdout
     print(command_result)
 
 
