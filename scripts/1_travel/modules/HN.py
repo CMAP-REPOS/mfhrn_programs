@@ -336,8 +336,12 @@ class HighwayNetwork:
                 parklanes2 = row[lf_dict["PARKLANES2"]]
                 parkres1 = row[lf_dict["PARKRES1"]]
                 parkres2 = row[lf_dict["PARKRES2"]]
-                buslanes1 = row[lf_dict["BUSLANES1"]]
-                buslanes2 = row[lf_dict["BUSLANES2"]]
+                buslanes1 = (
+                    row[lf_dict["BUSLANES1"]] if "BUSLANES1" in lf_dict else None
+                )
+                buslanes2 = (
+                    row[lf_dict["BUSLANES2"]] if "BUSLANES1" in lf_dict else None
+                )
                 sigic = row[lf_dict["SIGIC"]]
                 cltl = row[lf_dict["CLTL"]]
                 rrgradex = row[lf_dict["RRGRADECROSS"]]
@@ -927,16 +931,36 @@ class HighwayNetwork:
                 nfeet2 = row[cf_dict["NEW_THRULANEWIDTH2"]]
                 aparklanes1 = row[cf_dict["ADD_PARKLANES1"]]
                 aparklanes2 = row[cf_dict["ADD_PARKLANES2"]]
-                cparkres1 = row[cf_dict["CHANGE_PARKRES1"]]
-                cparkres2 = row[cf_dict["CHANGE_PARKRES2"]]
-                abuslanes1 = row[cf_dict["ADD_BUSLANES1"]]
-                abuslanes2 = row[cf_dict["ADD_BUSLANES2"]]
+                cparkres1 = (
+                    row[cf_dict["CHANGE_PARKRES1"]]
+                    if "CHANGE_PARKRES1" in cf_dict
+                    else None
+                )
+                cparkres2 = (
+                    row[cf_dict["CHANGE_PARKRES2"]]
+                    if "CHANGE_PARKRES2" in cf_dict
+                    else None
+                )
+                abuslanes1 = (
+                    row[cf_dict["ADD_BUSLANES1"]]
+                    if "ADD_BUSLANES1" in cf_dict
+                    else None
+                )
+                abuslanes2 = (
+                    row[cf_dict["ADD_BUSLANES2"]]
+                    if "ADD_BUSLANES2" in cf_dict
+                    else None
+                )
                 asigic = row[cf_dict["ADD_SIGIC"]]
                 acltl = row[cf_dict["ADD_CLTL"]]
                 arrgradex = row[cf_dict["ADD_RRGRADECROSS"]]
                 ntoll = row[cf_dict["NEW_TOLLDOLLARS"]]
                 nmodes = row[cf_dict["NEW_MODES"]]
-                nvclearance = row[cf_dict["NEW_VCLEARANCE"]]
+                nvclearance = (
+                    row[cf_dict["NEW_VCLEARANCE"]]
+                    if "NEW_VCLEARANCE" in cf_dict
+                    else None
+                )
 
                 # check for valid action code = 3
                 attributes = [
@@ -1230,6 +1254,24 @@ class HighwayNetwork:
             "PROCESS_NOTES",
             "USE",
         ]
+
+        # NOTE: AR: Some of the columns Cindy assumed would be in the Excel hwyproj coding sheet
+        # will not necessarily be there, so instead of trying to access them directly, need
+        # to add them first to prevent error on `hwyproj_xl_df[col_order]`
+
+        # Optional columns that may not be present in some coding sheets
+        _optional_missing_ok = [
+            "parkres1",
+            "parkres2",
+            "buslanes1",
+            "buslanes2",
+            "vclearance",
+        ]
+        _missing = [c for c in _optional_missing_ok if c not in hwyproj_xl_df.columns]
+        for c in _missing:
+            hwyproj_xl_df[c] = None
+        if _missing:
+            print(f"Note: added optional columns absent in coding sheet: {_missing}")
 
         hwyproj_xl_df = hwyproj_xl_df[col_order]
 
@@ -1826,14 +1868,14 @@ class HighwayNetwork:
         parklanes2_pos = lf_dict["PARKLANES2"]
         parkres1_pos = lf_dict["PARKRES1"]
         parkres2_pos = lf_dict["PARKRES2"]
-        buslanes1_pos = lf_dict["BUSLANES1"]
-        buslanes2_pos = lf_dict["BUSLANES2"]
+        buslanes1_pos = lf_dict["BUSLANES1"] if "BUSLANES1" in lf_dict else None
+        buslanes2_pos = lf_dict["BUSLANES2"] if "BUSLANES2" in lf_dict else None
         sigic_pos = lf_dict["SIGIC"]
         cltl_pos = lf_dict["CLTL"]
         rrgradex_pos = lf_dict["RRGRADECROSS"]
         toll_pos = lf_dict["TOLLDOLLARS"]
         modes_pos = lf_dict["MODES"]
-        vclearance_pos = lf_dict["VCLEARANCE"]
+        vclearance_pos = lf_dict["VCLEARANCE"] if "VCLEARANCE" in lf_dict else None
         nbaselink_pos = lf_dict["NEW_BASELINK"]
         proj_pos = lf_dict["PROJECT"]
         desc_pos = lf_dict["DESCRIPTION"]
@@ -1853,16 +1895,26 @@ class HighwayNetwork:
         nfeet2_pos = cf_dict["NEW_THRULANEWIDTH2"]
         aparklanes1_pos = cf_dict["ADD_PARKLANES1"]
         aparklanes2_pos = cf_dict["ADD_PARKLANES2"]
-        cparkres1_pos = cf_dict["CHANGE_PARKRES1"]
-        cparkres2_pos = cf_dict["CHANGE_PARKRES2"]
-        abuslanes1_pos = cf_dict["ADD_BUSLANES1"]
-        abuslanes2_pos = cf_dict["ADD_BUSLANES2"]
+        cparkres1_pos = (
+            cf_dict["CHANGE_PARKRES1"] if "CHANGE_PARKRES1" in cf_dict else None
+        )
+        cparkres2_pos = (
+            cf_dict["CHANGE_PARKRES2"] if "CHANGE_PARKRES2" in cf_dict else None
+        )
+        abuslanes1_pos = (
+            cf_dict["ADD_BUSLANES1"] if "ADD_BUSLANES1" in cf_dict else None
+        )
+        abuslanes2_pos = (
+            cf_dict["ADD_BUSLANES2"] if "ADD_BUSLANES2" in cf_dict else None
+        )
         asigic_pos = cf_dict["ADD_SIGIC"]
         acltl_pos = cf_dict["ADD_CLTL"]
         arrgradex_pos = cf_dict["ADD_RRGRADECROSS"]
         ntoll_pos = cf_dict["NEW_TOLLDOLLARS"]
         nmodes_pos = cf_dict["NEW_MODES"]
-        nvclearance_pos = cf_dict["NEW_VCLEARANCE"]
+        nvclearance_pos = (
+            cf_dict["NEW_VCLEARANCE"] if "NEW_VCLEARANCE" in cf_dict else None
+        )
         notes_pos = cf_dict["PROCESS_NOTES"]
 
         # apply all action = 1
@@ -1885,16 +1937,26 @@ class HighwayNetwork:
                 nfeet2 = edits["NEW_THRULANEWIDTH2"]
                 aparklanes1 = edits["ADD_PARKLANES1"]
                 aparklanes2 = edits["ADD_PARKLANES2"]
-                cparkres1 = edits["CHANGE_PARKRES1"]
-                cparkres2 = edits["CHANGE_PARKRES2"]
-                abuslanes1 = edits["ADD_BUSLANES1"]
-                abuslanes2 = edits["ADD_BUSLANES2"]
+                cparkres1 = (
+                    edits["CHANGE_PARKRES1"] if "CHANGE_PARKRES1" in edits else None
+                )
+                cparkres2 = (
+                    edits["CHANGE_PARKRES2"] if "CHANGE_PARKRES2" in edits else None
+                )
+                abuslanes1 = (
+                    edits["ADD_BUSLANES1"] if "ADD_BUSLANES1" in edits else None
+                )
+                abuslanes2 = (
+                    edits["ADD_BUSLANES2"] if "ADD_BUSLANES2" in edits else None
+                )
                 asigic = edits["ADD_SIGIC"]
                 acltl = edits["ADD_CLTL"]
                 arrgradex = edits["ADD_RRGRADECROSS"]
                 ntoll = edits["NEW_TOLLDOLLARS"]
                 nmodes = edits["NEW_MODES"]
-                nvclearance = edits["NEW_VCLEARANCE"]
+                nvclearance = (
+                    edits["NEW_VCLEARANCE"] if "NEW_VCLEARANCE" in edits else None
+                )
 
                 where_clause = f"ABB = '{abb}'"
                 with arcpy.da.UpdateCursor(
