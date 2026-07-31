@@ -288,3 +288,35 @@ Same thing for 'vclearance'.
 
 **Finally**(!) after fixing all of those problems one at a time, I was able to get
 the full `import-hwyproj_coding` tool to run!
+
+## 07/23/26:
+Added a MHN preparation script which moves the MHN from the network drive
+into the correct places to be used for testing (both into 'tests/inputs/'
+and into the expected place in 'input/1_travel/MHN.gdb')
+
+Also, fixed some minor logic bugs and cleaned up the code a little bit
+for a couple of the tests.
+
+## 07/24/26:
+Added a test to see that the `generate_hwy_files` tool correctly produces
+all the expected EMME files. Began working on the MFHRN + MHN pipeline
+tests that use the before and after GDBs provided by Tim.
+
+## 07/28/26:
+Trying to run all tests including the `base_mhn` prep, but getting the following error:
+```shell
+ mfhrn_programs  working/aaron arcpy $ date +"%T" && python tests/src/main.py && date +"%T"
+10:47:11
+Running all tests
+Putting base MHN in correct locations
+Traceback (most recent call last):
+  File "C:\Users\arumph\Repos\mfhrn_programs\tests\src\main.py", line 89, in <module>
+    main()
+  File "C:\Users\arumph\Repos\mfhrn_programs\tests\src\main.py", line 69, in main
+    base_mhn.main()
+  File "C:\Users\arumph\Repos\mfhrn_programs\tests\src\input_preparation\base_mhn.py", line 84, in main
+    remove_duplicate_tipids(destination_path)
+  File "C:\Users\arumph\Repos\mfhrn_programs\tests\src\input_preparation\base_mhn.py", line 58, in remove_duplicate_tipids
+    for row in cursor:
+RuntimeError: Objects in this class cannot be updated outside an edit session [hwyproj]
+```
