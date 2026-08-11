@@ -565,3 +565,208 @@ RuntimeError: Pipeline equivalence test failed:
 08:29:03
  mfhrn_programs  working/aaron cmaputils $
 ```
+
+```shell
+
+ mfhrn_programs  working/aaron cmaputils $ mamba activate arcpy; date +"%T"; python tests/src/pipeline.py; date +"%T"; mamba activate cmaputils
+15:43:53
+Running full MHN + MFHRN pipeline test
+Ensuring that all input test files for pipeline test are in correct place
+Copying M:\proj1\tko\MHN\mfhrn_equivalence_test\0_incorporate_edits to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits
+Successfully copied M:\proj1\tko\MHN\mfhrn_equivalence_test\0_incorporate_edits to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits
+Local copy of M:\proj1\tko\MHN\mfhrn_equivalence_test\1_import_hwy_coding already exists at C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\import_hwy_coding
+Local copy of M:\proj1\tko\MHN\mfhrn_equivalence_test\2_update_hwyproj_years already exists at C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years
+Local copy of M:\proj1\tko\MHN\mfhrn_equivalence_test\3_output already exists at C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\output
+Traceback (most recent call last):
+  File "C:\Users\arumph\Repos\mfhrn_programs\tests\src\pipeline.py", line 831, in <module>
+    main()
+  File "C:\Users\arumph\Repos\mfhrn_programs\tests\src\pipeline.py", line 798, in main
+    copy_network_input_data()
+  File "C:\Users\arumph\Repos\mfhrn_programs\tests\src\pipeline.py", line 414, in copy_network_input_data
+    raise FileNotFoundError(
+FileNotFoundError: Neither network nor local test GDB exists: M:\proj1\tko\MHN\mfhrn_equivalence_test\0_incorporate_edits\before_state0.gdb
+15:44:01
+ mfhrn_programs  working/aaron cmaputils $ mamba activate arcpy; date +"%T"; python tests/src/pipeline.py; date +"%T"; mamba activate cmaputils
+15:44:13
+Running full MHN + MFHRN pipeline test
+Ensuring that all input test files for pipeline test are in correct place
+Copying M:\proj1\tko\MHN\mfhrn_equivalence_test\0_incorporate_edits to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits
+Successfully copied M:\proj1\tko\MHN\mfhrn_equivalence_test\0_incorporate_edits to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits
+Copying M:\proj1\tko\MHN\mfhrn_equivalence_test\1_import_hwy_coding to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\import_hwy_coding
+Successfully copied M:\proj1\tko\MHN\mfhrn_equivalence_test\1_import_hwy_coding to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\import_hwy_coding
+Copying M:\proj1\tko\MHN\mfhrn_equivalence_test\2_update_hwyproj_years to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years
+Successfully copied M:\proj1\tko\MHN\mfhrn_equivalence_test\2_update_hwyproj_years to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years
+Copying M:\proj1\tko\MHN\mfhrn_equivalence_test\3_output to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\output
+Successfully copied M:\proj1\tko\MHN\mfhrn_equivalence_test\3_output to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\output
+Copying M:\proj1\tko\MHN\mfhrn_equivalence_test\0_incorporate_edits\before_state0.gdb to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\before_state0.gdb
+Copying M:\proj1\tko\MHN\mfhrn_equivalence_test\1_import_hwy_coding\before_state1.gdb to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\import_hwy_coding\before_state1.gdb
+Copying M:\proj1\tko\MHN\mfhrn_equivalence_test\2_update_hwyproj_years\before_state2.gdb to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years\before_state2.gdb
+Copying M:\proj1\tko\MHN\mfhrn_equivalence_test\0_incorporate_edits\after_state1.gdb to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\after_state1.gdb
+Copying M:\proj1\tko\MHN\mfhrn_equivalence_test\1_import_hwy_coding\after_state2.gdb to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\import_hwy_coding\after_state2.gdb
+Copying M:\proj1\tko\MHN\mfhrn_equivalence_test\2_update_hwyproj_years\after_state3.gdb to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years\after_state3.gdb
+Copying M:\adb\MRN\dev\mrn.gdb to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years\mrn.gdb
+Checking C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\after_state1.gdb and C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\import_hwy_coding\before_state1.gdb for equality
+bus_base_itin matches
+bus_current_itin matches
+bus_future_itin matches
+hwynet/bus_base matches
+hwynet/bus_current matches
+hwynet/bus_future matches
+hwynet/hwynet_arc matches
+hwynet/hwynet_node matches
+hwynet/hwyproj matches
+hwyproj_coding matches
+mhn_baselinks matches
+parknride matches
+sensor_points matches
+sensor_roads_intersect matches
+z_bus_future_itin_2024 matches
+Checking C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\import_hwy_coding\after_state2.gdb and C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years\before_state2.gdb for equality
+bus_base_itin matches
+bus_current_itin matches
+bus_future_itin matches
+hwynet/bus_base matches
+hwynet/bus_current matches
+hwynet/bus_future matches
+hwynet/hwynet_arc matches
+hwynet/hwynet_node matches
+hwynet/hwyproj matches
+hwyproj_coding matches
+mhn_baselinks matches
+parknride matches
+sensor_points matches
+sensor_roads_intersect matches
+z_bus_future_itin_2024 matches
+Pipeline fixture handoffs and auxiliary inputs are valid
+Running `incorporate_edits (MHN)`
+--------------------------------------------------------------------------------
+Succesfully fixed 'hwynet_arc' in C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\output_after_state1.gdb
+
+Validating edits:
+-- All arcs have all required attributes
+-- All arcs have valid truck restriction attributes
+-- New node values have been assigned for split arcs
+-- No nodes have duplicate IDs
+-- No nodes overlap each other
+
+Updating features (in memory):
+-- New NODE values assigned
+-- Park-n-Ride NODE values verified
+Traceback (most recent call last):
+  File "C:\Users\arumph\Repos\mhn_programs\src\incorporate_edits.py", line 473, in <module>
+    subzone_lyr = MHN.make_skinny_feature_layer(MHN.subzone, 'subzone_lyr', [MHN.zone_attr, MHN.subzone_attr, MHN.capzone_attr])
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\arumph\Repos\mhn_programs\src\MHN.py", line 679, in make_skinny_feature_layer
+    return self.make_skinny(True, fc, lyr, keep_fields_list, where_clause)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\arumph\Repos\mhn_programs\src\MHN.py", line 662, in make_skinny
+    input_fields = arcpy.ListFields(in_obj)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\ArcGIS\Pro\Resources\ArcPy\arcpy\__init__.py", line 1228, in ListFields
+    return gp.listFields(dataset, wild_card, field_type)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\ArcGIS\Pro\Resources\ArcPy\arcpy\geoprocessing\_base.py", line 378, in listFields
+    self._gp.ListFields(*gp_fixargs(args, True)))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: "C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\zone_systems.gdb\zonesys17\subzones17" does not exist
+`incorporate_edits (MHN)` failed: Command '['C:\\Users\\arumph\\AppData\\Local\\ESRI\\conda\\envs\\arcpy\\python.exe', 'C:/Users/arumph/Repos/mhn_programs\\src\\incorporate_edits.py', 'C:\\Users\\arumph\\Repos\\mfhrn_programs\\tests\\inputs\\pipeline\\incorporate_edits\\output_after_state1.gdb']' returned non-zero exit status 1.
+Running `import_hwyproj_coding (MFHRN)`
+--------------------------------------------------------------------------------
+Added missing optional field: CHANGE_PARKRES1 (SHORT)
+Added missing optional field: CHANGE_PARKRES2 (SHORT)
+Added missing optional field: ADD_BUSLANES1 (SHORT)
+Added missing optional field: ADD_BUSLANES2 (SHORT)
+Added missing optional field: NEW_VCLEARANCE (DOUBLE)
+Initialized added fields to 0: CHANGE_PARKRES1, CHANGE_PARKRES2, ADD_BUSLANES1, ADD_BUSLANES2, NEW_VCLEARANCE
+Added missing optional field: BUSLANES1 (SHORT)
+Added missing optional field: BUSLANES2 (SHORT)
+Initialized added fields to 0: BUSLANES1, BUSLANES2
+Added missing optional field: CHANGE_PARKRES1 (SHORT)
+Added missing optional field: CHANGE_PARKRES2 (SHORT)
+Added missing optional field: ADD_BUSLANES1 (SHORT)
+Added missing optional field: ADD_BUSLANES2 (SHORT)
+Added missing optional field: NEW_VCLEARANCE (DOUBLE)
+Initialized added fields to 0: CHANGE_PARKRES1, CHANGE_PARKRES2, ADD_BUSLANES1, ADD_BUSLANES2, NEW_VCLEARANCE
+Added missing optional field: BUSLANES1 (SHORT)
+Added missing optional field: BUSLANES2 (SHORT)
+Initialized added fields to 0: BUSLANES1, BUSLANES2
+Copying base year...
+Base year copied and prepared for modification.
+
+Checking feature classes for errors...
+Base feature classes checked for errors.
+
+Importing highway project coding...
+Highway project coding imported.
+
+Checking base project table for errors...
+Base highway project table checked for errors.
+
+Finalizing highway data...
+Highway data finalized.
+
+Adding back relationship classes...
+Relationship classes added.
+0m 58s to execute.
+Done
+Checking C:\Users\arumph\Repos\mfhrn_programs\tests\outputs\pipeline\after_state2_mhn.gdb and C:\Users\arumph\Repos\mfhrn_programs\tests\outputs\pipeline\after_state2_mfhrn.gdb for equality
+bus_base_itin matches
+bus_current_itin matches
+bus_future_itin matches
+hwynet/bus_base matches
+hwynet/bus_current matches
+hwynet/bus_future matches
+hwynet/hwynet_arc matches
+hwynet/hwynet_node matches
+Differences found in hwynet/hwyproj
+Rows missing from C:\Users\arumph\Repos\mfhrn_programs\tests\outputs\pipeline\after_state2_mfhrn.gdb: 19; sample keys: [('10030007',), ('10030008',), ('8000047',), ('8000058',), ('8070010',), ('9000030',), ('9000033',), ('9060015',), ('9990101',), ('9990102',), ('10000115',), ('10940014',), ('12070007',), ('11000407',), ('6140014',), ('8160032',), ('10110061',), ('9030002',), ('12345678',)]
+Differences found in hwyproj_coding
+Rows missing from C:\Users\arumph\Repos\mfhrn_programs\tests\outputs\pipeline\after_state2_mfhrn.gdb: 1511; sample keys: [('1000059', '21890-21897-1'), ('1000059', '21887-21889-1'), ('1000059', '21889-21893-1'), ('1000059', '15545-15520-1'), ('1000059', '21892-21888-1'), ('1000059', '21880-21883-1'), ('1000059', '21896-21891-1'), ('1000059', '15521-15546-1'), ('10030003', '9362-9444-0'), ('10030003', '9362-9615-1'), ('10030003', '9444-9615-0'), ('10030007', '8364-8262-0'), ('10030007', '8276-8262-1'), ('10030007', '8364-8276-1'), ('10030007', '8204-8262-0'), ('10030007', '8204-8276-1'), ('10060020', '10310-19891-0'), ('10060020', '10204-19893-0'), ('10060020', '10311-10052-1'), ('10060020', '10052-19892-0')]
+Rows missing from C:\Users\arumph\Repos\mfhrn_programs\tests\outputs\pipeline\after_state2_mhn.gdb: 44; sample keys: [('4000023', '11624-11523-1'), ('4000023', '12199-20215-1'), ('4000023', '12286-20210-1'), ('4000023', '12343-12521-1'), ('4000023', '12521-23956-1'), ('4000023', '12535-20211-1'), ('4000023', '12606-12535-1'), ('4000023', '12638-12642-1'), ('4000023', '12642-12652-1'), ('4000023', '13349-21076-1'), ('4000023', '13891-13998-1'), ('4000023', '13998-21051-1'), ('4000023', '14074-21048-1'), ('4000023', '14222-14074-1'), ('4000023', '14225-14273-1'), ('4000023', '14273-14458-1'), ('4000023', '14274-14222-1'), ('4000023', '14458-14512-1'), ('4000023', '14463-14274-1'), ('4000023', '14512-14634-1')]
+mhn_baselinks matches
+parknride matches
+sensor_points matches
+sensor_roads_intersect matches
+z_bus_future_itin_2024 matches
+`import_hwyproj_coding (MFHRN)` failed: import_hwyproj_coding output does not match after_state2.gdb
+Running `update_highway_project_years (MHN)`
+--------------------------------------------------------------------------------
+
+Checking future transit projects...
+
+All in-region, conformed projects coded in MHN are listed in C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years\year_c26q2.csv or C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years\required_c26q2.csv!
+WARNING:
+WARNING: Some projects in C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years\year_c26q2.csv or C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years\required_c26q2.csv but not C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years\no_code_c26q2.csv are not yet coded in MHN. See C:\Users\arumph\Repos\mhn_programs\temp\in_year_not_mhn.txt for details.
+
+Updating COMPLETION_YEAR values for projects coded in MHN that are listed in C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years\year_c26q2.csv or C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years\required_c26q2.csv...
+
+All done!
+
+Checking C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years\after_state3.gdb and C:\Users\arumph\Repos\mfhrn_programs\tests\outputs\pipeline\after_state3.gdb for equality
+bus_base_itin matches
+bus_current_itin matches
+bus_future_itin matches
+hwynet/bus_base matches
+hwynet/bus_current matches
+hwynet/bus_future matches
+hwynet/hwynet_arc matches
+hwynet/hwynet_node matches
+hwynet/hwyproj matches
+hwyproj_coding matches
+mhn_baselinks matches
+parknride matches
+sensor_points matches
+sensor_roads_intersect matches
+z_bus_future_itin_2024 matches
+`update_highway_project_years` tool passed
+`update_highway_project_years (MHN)` succeeded
+Traceback (most recent call last):
+  File "C:\Users\arumph\Repos\mfhrn_programs\tests\src\pipeline.py", line 831, in <module>
+    main()
+  File "C:\Users\arumph\Repos\mfhrn_programs\tests\src\pipeline.py", line 827, in main
+    raise RuntimeError(f"Pipeline equivalence test failed:\n{details}")
+RuntimeError: Pipeline equivalence test failed:
+- incorporate_edits (MHN): Command '['C:\\Users\\arumph\\AppData\\Local\\ESRI\\conda\\envs\\arcpy\\python.exe', 'C:/Users/arumph/Repos/mhn_programs\\src\\incorporate_edits.py', 'C:\\Users\\arumph\\Repos\\mfhrn_programs\\tests\\inputs\\pipeline\\incorporate_edits\\output_after_state1.gdb']' returned non-zero exit status 1.
+- import_hwyproj_coding (MFHRN): import_hwyproj_coding output does not match after_state2.gdb
+16:41:43
+```
