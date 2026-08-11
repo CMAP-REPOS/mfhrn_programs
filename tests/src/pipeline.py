@@ -11,6 +11,7 @@ Updated: 07/31/2026
 import os
 import shutil
 import subprocess
+from collections import Counter
 from pathlib import Path
 import arcpy
 
@@ -163,7 +164,7 @@ TEST_INPUT_REQUIRED_CSV = os.path.join(
     LOCAL_UPDATE_HWYPROJ_YEARS_DATA_DIR, "required_c26q2.csv"
 )
 TEST_INPUT_NOCODE_CSV = os.path.join(
-    LOCAL_UPDATE_HWYPROJ_YEARS_DATA_DIR, "no_code_c26q2"
+    LOCAL_UPDATE_HWYPROJ_YEARS_DATA_DIR, "no_code_c26q2.csv"
 )
 
 # MHN Script paths
@@ -208,6 +209,14 @@ HWYNET_ARC_OPTIONAL_FIELDS = {
         None,
         None,
     ),
+}
+
+# use stable IDs where possible so one deleted row doesn't shift every comparison
+COMPARISON_KEY_FIELDS = {
+    "hwyproj_coding": ("TIPID", "ABB"),
+    "hwynet/hwynet_arc": ("ABB",),
+    "hwynet/hwynet_node": ("NODE",),
+    "hwynet/hwyproj": ("TIPID",),
 }
 
 
@@ -325,12 +334,14 @@ def remove_duplicate_tipids(mhn_gdb_path):
     clear_workspace_cache(mhn_gdb_path)
 
 
-def ensure_optional_fields(fc_path, optional_fields):
+def ensure_optional_fields(fc_path, optional_fields, added_field_default=None):
     """
-    Helper function: ensures optional fields exist in the feature class
+    Helper function: ensures optional fields exist in the feature class and
+    fills newly added fields with the given default
     """
 
     existing = {f.name.upper() for f in arcpy.ListFields(fc_path)}
+    added_fields = []
     for name, (ftype, prec, scale, length) in optional_fields.items():
         if name not in existing:
             arcpy.management.AddField(
@@ -341,7 +352,26 @@ def ensure_optional_fields(fc_path, optional_fields):
                 field_scale=scale,
                 field_length=length,
             )
+            added_fields.append(name)
             print(f"Added missing optional field: {name} ({ftype})")
+
+    # new numeric fields need 0 instead of NULL because 0 means "no change"
+    if added_fields and added_field_default is not None:
+        with arcpy.da.UpdateCursor(fc_path, added_fields) as cursor:
+            for row in cursor:
+                changed = False
+                for index, value in enumerate(row):
+                    if value is None:
+                        row[index] = added_field_default
+                        changed = True
+                if changed:
+                    cursor.updateRow(row)
+        print(
+            f"Initialized added fields to {added_field_default}: "
+            f"{', '.join(added_fields)}"
+        )
+
+    return added_fields
 
 
 def copy_network_input_data():
@@ -350,6 +380,7 @@ def copy_network_input_data():
     GDBs by copying them from network drive if necessary.
     """
     print("Ensuring that all input test files for pipeline test are in correct place")
+    network_data_available = False
     for network_test_dir, local_test_dir in TEST_INPUT_DATA_DIR_PAIRS:
         if not Path(network_test_dir).is_dir() and not Path(local_test_dir).is_dir():
             raise FileNotFoundError(
@@ -357,12 +388,16 @@ def copy_network_input_data():
                 " You might not be connected to CMAP's network!"
             )
         elif Path(network_test_dir).is_dir():
+            network_data_available = True
             print(f"Copying {network_test_dir} to {local_test_dir}")
+
+            # clear the local copy first so old File GDB files don't get mixed in
+            if Path(local_test_dir).is_dir():
+                shutil.rmtree(local_test_dir)
             shutil.copytree(
                 network_test_dir,
                 local_test_dir,
-                dirs_exist_ok=True,
-                ignore=shutil.ignore_patterns("*.lock"),
+                ignore=shutil.ignore_patterns("*.lock", "*.gdb"),
             )
             print(f"Successfully copied {network_test_dir} to {local_test_dir}")
         else:
@@ -370,21 +405,28 @@ def copy_network_input_data():
                 f"Local copy of {network_test_dir} already exists at {local_test_dir}"
             )
 
-    # now copy the GDBs that were skipped above
+    # copy the GDBs separately with ArcPy
     for network_gdb, local_gdb in TEST_GDB_PAIRS:
-        if not Path(local_gdb).is_dir():
+        if Path(network_gdb).is_dir():
             print(f"Copying {network_gdb} to {local_gdb}")
             copy_gdb(network_gdb, local_gdb)
+        elif not Path(local_gdb).is_dir():
+            raise FileNotFoundError(
+                f"Neither network nor local test GDB exists: {network_gdb}"
+            )
 
     # update_highway_project_years also needs a local copy of the MRN
-    if not Path(LOCAL_MRN_GDB_PATH).is_dir():
-        if not Path(MRN_GDB_PATH_NETWORK).is_dir():
-            raise FileNotFoundError(
-                f"MRN not found at {MRN_GDB_PATH_NETWORK}. You might not be "
-                "connected to CMAP's network!"
-            )
+    if Path(MRN_GDB_PATH_NETWORK).is_dir():
         print(f"Copying {MRN_GDB_PATH_NETWORK} to {LOCAL_MRN_GDB_PATH}")
         copy_gdb(MRN_GDB_PATH_NETWORK, LOCAL_MRN_GDB_PATH)
+    elif not Path(LOCAL_MRN_GDB_PATH).is_dir():
+        raise FileNotFoundError(
+            f"MRN not found at {MRN_GDB_PATH_NETWORK}. You might not be "
+            "connected to CMAP's network!"
+        )
+
+    if not network_data_available:
+        print("Using existing local pipeline fixtures")
 
 
 def _list_comparable_gdb_items(gdb_path):
@@ -404,6 +446,68 @@ def _list_comparable_gdb_items(gdb_path):
             items[relative_path] = (item_path, description.dataType)
 
     return items
+
+
+def _comparison_options(relative_path, gdb_1_item, gdb_2_item):
+    """
+    Helper function: gets the sort fields and fields to leave out of a comparison
+    """
+    fields_1 = {
+        field.name.upper(): field.name for field in arcpy.ListFields(gdb_1_item)
+    }
+    fields_2 = {
+        field.name.upper(): field.name for field in arcpy.ListFields(gdb_2_item)
+    }
+    configured_keys = COMPARISON_KEY_FIELDS.get(relative_path)
+
+    if configured_keys:
+        missing = [
+            field
+            for field in configured_keys
+            if field.upper() not in fields_1 or field.upper() not in fields_2
+        ]
+        if missing:
+            raise ValueError(
+                f"{relative_path} is missing comparison key field(s): {missing}"
+            )
+        sort_fields = [fields_1[field.upper()] for field in configured_keys]
+    else:
+        # fall back to OBJECTID if this table doesn't have a known unique ID
+        sort_fields = [arcpy.Describe(gdb_1_item).OIDFieldName]
+
+    omit_fields = {
+        arcpy.Describe(gdb_1_item).OIDFieldName,
+        arcpy.Describe(gdb_2_item).OIDFieldName,
+    }
+    return sort_fields, sorted(omit_fields)
+
+
+def _key_counts(item_path, key_fields):
+    """
+    Helper function: counts rows based on the fields used to compare them
+    """
+    with arcpy.da.SearchCursor(item_path, key_fields) as cursor:
+        return Counter(tuple(row) for row in cursor)
+
+
+def _print_key_difference(relative_path, gdb_1, gdb_2, counts_1, counts_2):
+    """
+    Helper function: prints missing row IDs without comparing shifted rows
+    """
+    missing_from_2 = counts_1 - counts_2
+    missing_from_1 = counts_2 - counts_1
+
+    print(f"Differences found in {relative_path}")
+    if missing_from_2:
+        print(
+            f"Rows missing from {gdb_2}: {sum(missing_from_2.values())}; "
+            f"sample keys: {list(missing_from_2.elements())[:20]}"
+        )
+    if missing_from_1:
+        print(
+            f"Rows missing from {gdb_1}: {sum(missing_from_1.values())}; "
+            f"sample keys: {list(missing_from_1.elements())[:20]}"
+        )
 
 
 def check_gdb_equality(gdb_1, gdb_2):
@@ -439,23 +543,35 @@ def check_gdb_equality(gdb_1, gdb_2):
                 all_equal = False
                 continue
 
-            sort_field = arcpy.Describe(gdb_1_item).OIDFieldName
+            sort_fields, omit_fields = _comparison_options(
+                relative_path, gdb_1_item, gdb_2_item
+            )
+
+            counts_1 = _key_counts(gdb_1_item, sort_fields)
+            counts_2 = _key_counts(gdb_2_item, sort_fields)
+            if counts_1 != counts_2:
+                _print_key_difference(relative_path, gdb_1, gdb_2, counts_1, counts_2)
+                all_equal = False
+                continue
+
             if gdb_1_type == "FeatureClass":
                 result = arcpy.management.FeatureCompare(
                     in_base_features=gdb_1_item,
                     in_test_features=gdb_2_item,
-                    sort_field=sort_field,
+                    sort_field=sort_fields,
                     compare_type="ALL",
                     ignore_options=["IGNORE_RELATIONSHIPCLASSES"],
+                    omit_field=omit_fields,
                     continue_compare="CONTINUE_COMPARE",
                 )
             else:
                 result = arcpy.management.TableCompare(
                     in_base_table=gdb_1_item,
                     in_test_table=gdb_2_item,
-                    sort_field=sort_field,
+                    sort_field=sort_fields,
                     compare_type="ALL",
                     ignore_options=["IGNORE_RELATIONSHIPCLASSES"],
+                    omit_field=omit_fields,
                     continue_compare="CONTINUE_COMPARE",
                 )
 
@@ -485,12 +601,46 @@ def _prepare_mfhrn_import_gdb(gdb_path):
     ensure_optional_fields(
         os.path.join(gdb_path, "hwyproj_coding"),
         HWYPROJ_CODING_OPTIONAL_FIELDS,
+        added_field_default=0,
     )
     ensure_optional_fields(
         os.path.join(gdb_path, "hwynet", "hwynet_arc"),
         HWYNET_ARC_OPTIONAL_FIELDS,
+        added_field_default=0,
     )
     clear_workspace_cache(gdb_path)
+
+
+def validate_pipeline_fixture_handoffs():
+    """
+    Helper function: checks that each after state matches the next before state
+    and that all of the other input files exist
+    """
+    handoffs = [
+        (AFTER_STATE_1_GDB_PATH_LOCAL, BEFORE_STATE_1_GDB_PATH_LOCAL),
+        (AFTER_STATE_2_GDB_PATH_LOCAL, BEFORE_STATE_2_GDB_PATH_LOCAL),
+    ]
+
+    for after_state, next_before_state in handoffs:
+        if not check_gdb_equality(after_state, next_before_state):
+            raise AssertionError(
+                "Pipeline fixtures do not form a continuous sequence: "
+                f"{after_state} does not match {next_before_state}"
+            )
+
+    required_files = [
+        TEST_INPUT_HWYPROJ_CODING_XLSX,
+        TEST_INPUT_YEAR_CSV,
+        TEST_INPUT_REQUIRED_CSV,
+        TEST_INPUT_NOCODE_CSV,
+    ]
+    missing_files = [path for path in required_files if not Path(path).is_file()]
+    if missing_files:
+        raise FileNotFoundError(
+            "Missing pipeline input file(s): " + ", ".join(missing_files)
+        )
+
+    print("Pipeline fixture handoffs and auxiliary inputs are valid")
 
 
 def _find_mfhrn_output_gdb():
@@ -646,6 +796,7 @@ def test_mhn_update_hwyproj_years():
 def main():
     print("Running full MHN + MFHRN pipeline test")
     copy_network_input_data()
+    validate_pipeline_fixture_handoffs()
 
     # NOTE: AR: Because of the stupid arcpy locks, this used to wait 15 seconds
     # here until the locks released fully. That should not be necessary now because
