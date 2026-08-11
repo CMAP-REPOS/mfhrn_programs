@@ -320,3 +320,248 @@ Traceback (most recent call last):
     for row in cursor:
 RuntimeError: Objects in this class cannot be updated outside an edit session [hwyproj]
 ```
+
+## 08/03/2026:
+```
+ mfhrn_programs  working/aaron arcpy $ mamba activate arcpy; date +"%T"; python tests/src/pipeline.py; date +"%T"; mamba activate cmaputils
+07:28:17
+Running full MHN + MFHRN pipeline test
+Ensuring that all input test files for pipeline test are in correct place
+Copying M:\proj1\tko\MHN\mfhrn_equivalence_test\0_incorporate_edits to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits
+Successfully copied M:\proj1\tko\MHN\mfhrn_equivalence_test\0_incorporate_edits to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits
+Copying M:\proj1\tko\MHN\mfhrn_equivalence_test\1_import_hwy_coding to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\import_hwy_coding
+Successfully copied M:\proj1\tko\MHN\mfhrn_equivalence_test\1_import_hwy_coding to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\import_hwy_coding
+Copying M:\proj1\tko\MHN\mfhrn_equivalence_test\2_update_hwyproj_years to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years
+Successfully copied M:\proj1\tko\MHN\mfhrn_equivalence_test\2_update_hwyproj_years to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years
+Copying M:\proj1\tko\MHN\mfhrn_equivalence_test\3_output to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\output
+Successfully copied M:\proj1\tko\MHN\mfhrn_equivalence_test\3_output to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\output
+Copying M:\adb\MRN\dev\mrn.gdb to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years\mrn.gdb
+Running `incorporate_edits (MHN)`
+--------------------------------------------------------------------------------
+Succesfully fixed 'hwynet_arc' in C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\output_after_state1.gdb
+
+Validating edits:
+-- All arcs have all required attributes
+-- All arcs have valid truck restriction attributes
+-- New node values have been assigned for split arcs
+-- No nodes have duplicate IDs
+-- No nodes overlap each other
+
+Updating features (in memory):
+-- New NODE values assigned
+-- Park-n-Ride NODE values verified
+-- Node zone17, subzone17, capzone17 & IMArea fields recalculated
+-- Arc ANODE & BNODE fields recalculated
+-- Arc ABB field recalculated
+-- Arc MILES field recalculated
+-- Arc BEARING field recalculated
+-- Arc TOLLTYPE field recalculated
+-- No duplicate directional links detected
+
+Rebuilding route systems (in memory):
+-- hwyproj...
+-- bus_base...
+-- bus_current...
+-- bus_future...
+WARNING:
+Geodatabase temporarily backed up to C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\output_after_state1_20260803081811.gdb. (If update fails for any reason, replace C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\output_after_state1.gdb with this.)
+
+Saving changes to disk...
+-- C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\output_after_state1.gdb\hwynet\hwynet_arc...
+-- C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\output_after_state1.gdb\hwynet\hwynet_node...
+-- C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\output_after_state1.gdb\hwynet\hwyproj...
+-- C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\output_after_state1.gdb\hwyproj_coding...
+-- C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\output_after_state1.gdb\hwynet\bus_base...
+-- C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\output_after_state1.gdb\bus_base_itin...
+-- C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\output_after_state1.gdb\hwynet\bus_current...
+-- C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\output_after_state1.gdb\bus_current_itin...
+-- C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\output_after_state1.gdb\hwynet\bus_future...
+-- C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\output_after_state1.gdb\bus_future_itin...
+
+Rebuilding relationship classes...
+
+Changes successfully applied!
+
+Checking C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\after_state1.gdb and C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\incorporate_edits\output_after_state1.gdb for equality
+bus_base_itin matches
+bus_current_itin matches
+bus_future_itin matches
+hwynet/bus_base matches
+hwynet/bus_current matches
+hwynet/bus_future matches
+Differences found in hwynet/hwynet_arc
+Start Time: Monday, August 3, 2026 8:21:47 AM
+FeatureClass: ObjectID 13114 is different for Field ANODE (Base: 18778, Test: 18781).
+FeatureClass: ObjectID 13114 is different for Field ABB (Base: 18778-19681-1, Test: 18781-19681-1).
+FeatureClass: ObjectID 33117 is different for Field BNODE (Base: 18784, Test: 18785).
+FeatureClass: ObjectID 33117 is different for Field ABB (Base: 19680-18784-0, Test: 19680-18785-0).
+FeatureClass: ObjectID 33118 is different for Field ANODE (Base: 18781, Test: 18782).
+FeatureClass: ObjectID 33118 is different for Field BNODE (Base: 18785, Test: 18786).
+FeatureClass: ObjectID 33118 is different for Field ABB (Base: 18781-18785-0, Test: 18782-18786-0).
+FeatureClass: ObjectID 33119 is different for Field ANODE (Base: 18782, Test: 18783).
+FeatureClass: ObjectID 33119 is different for Field BNODE (Base: 18786, Test: 18787).
+FeatureClass: ObjectID 33119 is different for Field ABB (Base: 18782-18786-0, Test: 18783-18787-0).
+FeatureClass: ObjectID 33120 is different for Field ANODE (Base: 18783, Test: 18784).
+FeatureClass: ObjectID 33120 is different for Field ABB (Base: 18783-19680-1, Test: 18784-19680-1).
+FeatureClass: ObjectID 33121 is different for Field BNODE (Base: 18778, Test: 18781).
+FeatureClass: ObjectID 33121 is different for Field ABB (Base: 19680-18778-1, Test: 19680-18781-1).
+FeatureClass: ObjectID 33122 is different for Field ANODE (Base: 18778, Test: 18781).
+FeatureClass: ObjectID 33122 is different for Field ABB (Base: 18778-19678-1, Test: 18781-19678-1).
+FeatureClass: Shape types are the same.
+FeatureClass: Feature types are the same.
+Table: Table row counts are the same.
+FeatureClass: Feature class extents are the same.
+GeometryDef: GeometryDefs are the same.
+Field: Field properties are the same.
+Table: Table row counts are the same.
+SpatialReference: Spatial references are the same.
+Succeeded at Monday, August 3, 2026 8:21:51 AM (Elapsed Time: 4.19 seconds)
+Differences found in hwynet/hwynet_node
+Start Time: Monday, August 3, 2026 8:21:51 AM
+FeatureClass: ObjectID 1 is different for Field NODE (Base: 18781, Test: 18782).
+FeatureClass: ObjectID 2 is different for Field NODE (Base: 18782, Test: 18783).
+FeatureClass: ObjectID 3 is different for Field NODE (Base: 18783, Test: 18784).
+FeatureClass: ObjectID 4 is different for Field NODE (Base: 18784, Test: 18785).
+FeatureClass: ObjectID 5 is different for Field NODE (Base: 18785, Test: 18786).
+FeatureClass: ObjectID 6 is different for Field NODE (Base: 18786, Test: 18787).
+FeatureClass: ObjectID 17433 is different for Field Shape (Base: Geometry, Test: Geometry).
+FeatureClass: ObjectID 17433 is different for Field NODE (Base: 18778, Test: 18779).
+FeatureClass: ObjectID 17433 is different for Field POINT_X (Base: 286032.406190335751, Test: 622618.078818168491).
+FeatureClass: ObjectID 17433 is different for Field POINT_Y (Base: 1855818.562500588596, Test: 1924687.673777833581).
+FeatureClass: ObjectID 17433 is different for Field subzone17 (Base: 16934, Test: 2596).
+FeatureClass: ObjectID 17433 is different for Field zone17 (Base: 3148, Test: 1196).
+FeatureClass: ObjectID 17433 is different for Field capzone17 (Base: 11, Test: 5).
+FeatureClass: ObjectID 17433 is different for Field IMArea (Base: 0, Test: 1).
+FeatureClass: ObjectID 17434 is different for Field Shape (Base: Geometry, Test: Geometry).
+FeatureClass: ObjectID 17434 is different for Field NODE (Base: 18779, Test: 18780).
+FeatureClass: ObjectID 17434 is different for Field POINT_X (Base: 622618.078818168491, Test: 622373.491052750498).
+FeatureClass: ObjectID 17434 is different for Field POINT_Y (Base: 1924687.673777833581, Test: 1924793.681439839303).
+FeatureClass: ObjectID 17435 is different for Field Shape (Base: Geometry, Test: Geometry).
+FeatureClass: ObjectID 17435 is different for Field NODE (Base: 18780, Test: 18781).
+FeatureClass: ObjectID 17435 is different for Field POINT_X (Base: 622373.491052750498, Test: 286032.406190335751).
+FeatureClass: ObjectID 17435 is different for Field POINT_Y (Base: 1924793.681439839303, Test: 1855818.562500588596).
+FeatureClass: ObjectID 17435 is different for Field subzone17 (Base: 2596, Test: 16934).
+FeatureClass: ObjectID 17435 is different for Field zone17 (Base: 1196, Test: 3148).
+FeatureClass: ObjectID 17435 is different for Field capzone17 (Base: 5, Test: 11).
+FeatureClass: ObjectID 17435 is different for Field IMArea (Base: 1, Test: 0).
+FeatureClass: Shape types are the same.
+FeatureClass: Feature types are the same.
+Table: Table row counts are the same.
+FeatureClass: Feature class extents are the same.
+GeometryDef: GeometryDefs are the same.
+Field: Field properties are the same.
+Table: Table row counts are the same.
+SpatialReference: Spatial references are the same.
+Succeeded at Monday, August 3, 2026 8:21:53 AM (Elapsed Time: 1.48 seconds)
+hwynet/hwyproj matches
+hwyproj_coding matches
+mhn_baselinks matches
+parknride matches
+sensor_points matches
+sensor_roads_intersect matches
+z_bus_future_itin_2024 matches
+`incorporate_edits (MHN)` failed: incorporate_edits output does not match after_state1.gdb
+Running `import_hwyproj_coding (MFHRN)`
+--------------------------------------------------------------------------------
+Added missing optional field: CHANGE_PARKRES1 (SHORT)
+Added missing optional field: CHANGE_PARKRES2 (SHORT)
+Added missing optional field: ADD_BUSLANES1 (SHORT)
+Added missing optional field: ADD_BUSLANES2 (SHORT)
+Added missing optional field: NEW_VCLEARANCE (DOUBLE)
+Added missing optional field: BUSLANES1 (SHORT)
+Added missing optional field: BUSLANES2 (SHORT)
+Added missing optional field: CHANGE_PARKRES1 (SHORT)
+Added missing optional field: CHANGE_PARKRES2 (SHORT)
+Added missing optional field: ADD_BUSLANES1 (SHORT)
+Added missing optional field: ADD_BUSLANES2 (SHORT)
+Added missing optional field: NEW_VCLEARANCE (DOUBLE)
+Added missing optional field: BUSLANES1 (SHORT)
+Added missing optional field: BUSLANES2 (SHORT)
+Copying base year...
+Base year copied and prepared for modification.
+
+Checking feature classes for errors...
+Base feature classes checked for errors.
+
+Importing highway project coding...
+Highway project coding imported.
+
+Checking base project table for errors...
+Base highway project table checked for errors.
+
+Finalizing highway data...
+Highway data finalized.
+
+Adding back relationship classes...
+Relationship classes added.
+1m 25s to execute.
+Done
+Checking C:\Users\arumph\Repos\mfhrn_programs\tests\outputs\pipeline\after_state2_mhn.gdb and C:\Users\arumph\Repos\mfhrn_programs\tests\outputs\pipeline\after_state2_mfhrn.gdb for equality
+bus_base_itin matches
+bus_current_itin matches
+bus_future_itin matches
+hwynet/bus_base matches
+hwynet/bus_current matches
+hwynet/bus_future matches
+hwynet/hwynet_arc matches
+hwynet/hwynet_node matches
+Differences found in hwynet/hwyproj
+Start Time: Monday, August 3, 2026 8:26:09 AM
+WARNING 001620: Difference count exceeds 1500; stopping display. Output compare file was saved to C:\Users\arumph\Documents\ArcGIS\FeatureCompareOut_2.txt.
+Succeeded at Monday, August 3, 2026 8:26:10 AM (Elapsed Time: 0.40 seconds)
+Differences found in hwyproj_coding
+Start Time: Monday, August 3, 2026 8:26:10 AM
+WARNING 001620: Difference count exceeds 1500; stopping display. Output compare file was saved to C:\Users\arumph\Documents\ArcGIS\FeatureCompareOut_3.txt.
+Succeeded at Monday, August 3, 2026 8:26:11 AM (Elapsed Time: 1.15 seconds)
+mhn_baselinks matches
+parknride matches
+sensor_points matches
+sensor_roads_intersect matches
+z_bus_future_itin_2024 matches
+`import_hwyproj_coding (MFHRN)` failed: import_hwyproj_coding output does not match after_state2.gdb
+Running `update_highway_project_years (MHN)`
+--------------------------------------------------------------------------------
+ERROR:
+C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years\no_code_c26q2 doesn't exist!
+
+Checking C:\Users\arumph\Repos\mfhrn_programs\tests\inputs\pipeline\update_hwyproj_years\after_state3.gdb and C:\Users\arumph\Repos\mfhrn_programs\tests\outputs\pipeline\after_state3.gdb for equality
+bus_base_itin matches
+bus_current_itin matches
+bus_future_itin matches
+hwynet/bus_base matches
+hwynet/bus_current matches
+hwynet/bus_future matches
+hwynet/hwynet_arc matches
+hwynet/hwynet_node matches
+Differences found in hwynet/hwyproj
+Start Time: Monday, August 3, 2026 8:28:39 AM
+FeatureClass: ObjectID 623 is different for Field COMPLETION_YEAR (Base: 2039, Test: 2034).
+FeatureClass: ObjectID 624 is different for Field COMPLETION_YEAR (Base: 2034, Test: 9999).
+FeatureClass: Shape types are the same.
+FeatureClass: Feature types are the same.
+Table: Table row counts are the same.
+FeatureClass: Feature class extents are the same.
+GeometryDef: GeometryDefs are the same.
+Field: Field properties are the same.
+Table: Table row counts are the same.
+SpatialReference: Spatial references are the same.
+Succeeded at Monday, August 3, 2026 8:28:39 AM (Elapsed Time: 0.36 seconds)
+hwyproj_coding matches
+mhn_baselinks matches
+parknride matches
+sensor_points matches
+sensor_roads_intersect matches
+z_bus_future_itin_2024 matches
+`update_highway_project_years (MHN)` failed: update_highway_project_years output does not match after_state3.gdb
+Traceback (most recent call last):
+  File "C:\Users\arumph\Repos\mfhrn_programs\tests\src\pipeline.py", line 680, in <module>
+    main()
+  File "C:\Users\arumph\Repos\mfhrn_programs\tests\src\pipeline.py", line 676, in main
+    raise RuntimeError(f"Pipeline equivalence test failed:\n{details}")
+RuntimeError: Pipeline equivalence test failed:
+- incorporate_edits (MHN): incorporate_edits output does not match after_state1.gdb
+- import_hwyproj_coding (MFHRN): import_hwyproj_coding output does not match after_state2.gdb
+- update_highway_project_years (MHN): update_highway_project_years output does not match after_state3.gdb
+08:29:03
+ mfhrn_programs  working/aaron cmaputils $
+```

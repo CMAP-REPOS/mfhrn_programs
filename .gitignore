@@ -18,3 +18,5 @@ tests/src/_testing_config.py
 
 # input test files are too large to be pushed to github :(
 tests/inputs/
+# output files too
+tests/outputs/
